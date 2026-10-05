@@ -14,5 +14,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 camino = { workspace = true }
-tokio = { workspace = true, features = ["sync", "time", "process", "io-util"] }
+uuid = { workspace = true }
+zeroize = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time", "process", "io-util", "fs"] }
 tracing = { workspace = true }
