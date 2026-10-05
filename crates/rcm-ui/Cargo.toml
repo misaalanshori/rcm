@@ -13,6 +13,7 @@ path = "src/main.rs"
 rcm-core = { workspace = true }
 rcm-rc = { workspace = true }
 rcm-ipc = { workspace = true }
+rcm-platform = { workspace = true }
 rcm-ui-kit = { workspace = true }
 gpui-kit = { workspace = true }
 serde = { workspace = true }

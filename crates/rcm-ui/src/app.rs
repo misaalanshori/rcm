@@ -491,6 +491,147 @@ impl AppController {
             .await
             .map_err(|e| rcm_core::CoreError::Connection(format!("Task execution failed: {}", e)))?
     }
+
+    pub async fn save_mount_profile(&self, profile: rcm_core::MountProfile) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref ipc) = s.ipc_client {
+                    let val = serde_json::to_value(&profile).map_err(|e| {
+                        rcm_core::CoreError::Serialization(e.to_string())
+                    })?;
+                    ipc.call("profiles.save_mount", val).await?;
+                    let _ = ipc.call("reconcile.now", serde_json::json!({})).await;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Save mount failed: {}", e)))?
+    }
+
+    pub async fn delete_mount_profile(&self, id: &rcm_core::Id) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        let id_str = id.to_string();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref ipc) = s.ipc_client {
+                    ipc.call("profiles.delete_mount", serde_json::Value::String(id_str)).await?;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Delete mount failed: {}", e)))?
+    }
+
+    pub async fn mount_drive(
+        &self,
+        remote: &str,
+        mount_point: &str,
+        preset: rcm_core::MountPreset,
+    ) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        let r = remote.to_string();
+        let mp = mount_point.to_string();
+        let opts = preset.default_options();
+
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref rc) = s.rc_client {
+                    rc.mount_mount(&r, &mp, Some("cmount"), opts)
+                        .await
+                        .map_err(|e| rcm_core::CoreError::Validation(e.to_string()))?;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Mount failed: {}", e)))?
+    }
+
+    pub async fn unmount_drive(&self, mount_point: &str) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        let mp = mount_point.to_string();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref rc) = s.rc_client {
+                    rc.mount_unmount(&mp)
+                        .await
+                        .map_err(|e| rcm_core::CoreError::Validation(e.to_string()))?;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Unmount failed: {}", e)))?
+    }
+
+    pub async fn delete_remote(&self, name: &str) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        let n = name.to_string();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref rc) = s.rc_client {
+                    rc.config_delete(&n)
+                        .await
+                        .map_err(|e| rcm_core::CoreError::Validation(e.to_string()))?;
+                    let _ = rc.fscache_clear().await;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Delete remote failed: {}", e)))?
+    }
+
+    pub async fn fetch_providers(&self) -> Result<Vec<rcm_rc::types::ProviderInfo>, rcm_core::CoreError> {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref rc) = s.rc_client {
+                    let providers = rc.config_providers().await.map_err(|e| {
+                        rcm_core::CoreError::Validation(e.to_string())
+                    })?;
+                    return Ok(providers);
+                }
+                Ok(Vec::new())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Fetch providers failed: {}", e)))?
+    }
+
+    pub async fn list_files(&self, fs: &str, remote: &str) -> Result<Vec<FileEntryViewModel>, rcm_core::CoreError> {
+        let app = self.clone();
+        let fs_str = fs.to_string();
+        let rem_str = remote.to_string();
+
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref rc) = s.rc_client {
+                    let resp = rc.operations_list(&fs_str, &rem_str).await.map_err(|e| {
+                        rcm_core::CoreError::Validation(e.to_string())
+                    })?;
+                    let mut entries = Vec::new();
+                    for item in resp.list {
+                        entries.push(FileEntryViewModel {
+                            name: item.name,
+                            path: item.path,
+                            size_bytes: item.size,
+                            is_dir: item.is_dir,
+                            mod_time: item.mod_time,
+                            mime_type: item.mime_type,
+                        });
+                    }
+                    return Ok(entries);
+                }
+                Ok(Vec::new())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("List files failed: {}", e)))?
+    }
 }
 
 fn find_agent_binary() -> Option<String> {

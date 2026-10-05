@@ -30,13 +30,16 @@ fn main() {
 
         let app_clone = app.clone();
 
-        let _ = gpui_kit::open_window(window_options, cx, move |_window, cx| {
+        match gpui_kit::open_window(window_options, cx, move |_window, cx| {
             cx.new(|cx| {
                 let mut win = RcmDesktopWindow::new(app_clone);
                 win.refresh_state(cx);
                 win
             })
-        });
+        }) {
+            Ok(_) => println!("Successfully opened GPUI window"),
+            Err(e) => eprintln!("Failed to open GPUI window: {:?}", e),
+        }
 
         // Spawn background connection/bootstrap task on App
         cx.spawn(async move |_cx| {

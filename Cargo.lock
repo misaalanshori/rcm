@@ -5848,6 +5848,7 @@ dependencies = [
  "gpui-kit",
  "rcm-core",
  "rcm-ipc",
+ "rcm-platform",
  "rcm-rc",
  "rcm-ui-kit",
  "serde",
