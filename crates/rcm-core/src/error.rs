@@ -11,6 +11,9 @@ pub enum CoreError {
     #[error("Invalid drive letter '{0}': must be an ASCII alphabetic character (A-Z)")]
     InvalidDriveLetter(char),
 
+    #[error("Connection error: {0}")]
+    Connection(String),
+
     #[error("Validation failed: {0}")]
     Validation(String),
 

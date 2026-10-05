@@ -10,6 +10,7 @@ rcm-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["sync", "time", "net", "io-util"] }
+uuid = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time", "net", "io-util", "macros"] }
 interprocess = { workspace = true }
 tracing = { workspace = true }
