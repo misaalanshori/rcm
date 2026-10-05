@@ -36,6 +36,7 @@ impl RcmDesktopWindow {
     pub fn refresh_state(&mut self, cx: &mut Context<Self>) {
         let app = self.app.clone();
         cx.spawn(async move |this, cx| {
+            let _guard = app.tokio_handle().enter();
             let state_arc = app.state();
             let s = state_arc.read().await;
 
@@ -126,6 +127,7 @@ impl RcmDesktopWindow {
         cx.notify();
 
         cx.spawn(async move |this, cx| {
+            let _guard = app.tokio_handle().enter();
             let state_arc = app.state();
             let s = state_arc.read().await;
             if let Some(ref ipc) = s.ipc_client {
@@ -145,6 +147,7 @@ impl RcmDesktopWindow {
         cx.notify();
 
         cx.spawn(async move |this, cx| {
+            let _guard = app.tokio_handle().enter();
             let state_arc = app.state();
             let s = state_arc.read().await;
             if let Some(ref ipc) = s.ipc_client {

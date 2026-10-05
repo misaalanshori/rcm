@@ -50,13 +50,34 @@ impl Default for AppState {
 #[derive(Clone)]
 pub struct AppController {
     state: Arc<RwLock<AppState>>,
+    tokio_handle: tokio::runtime::Handle,
 }
 
 impl AppController {
     pub fn new() -> Self {
+        let tokio_handle = match tokio::runtime::Handle::try_current() {
+            Ok(h) => h,
+            Err(_) => {
+                // Initialize dedicated multi-thread Tokio runtime per SRDD §7.11
+                let rt = tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()
+                    .expect("Failed to initialize background Tokio runtime for RCM");
+                let handle = rt.handle().clone();
+                // Persist the runtime in background for the lifetime of the UI process
+                Box::leak(Box::new(rt));
+                handle
+            }
+        };
+
         Self {
             state: Arc::new(RwLock::new(AppState::default())),
+            tokio_handle,
         }
+    }
+
+    pub fn tokio_handle(&self) -> &tokio::runtime::Handle {
+        &self.tokio_handle
     }
 
     pub fn state(&self) -> Arc<RwLock<AppState>> {
@@ -162,6 +183,7 @@ impl AppController {
     }
 
     pub async fn connect_to_agent(&self, pipe_name: &str) -> Result<(), rcm_core::CoreError> {
+        let _guard = self.tokio_handle.enter();
         let ipc = IpcClient::connect(pipe_name).await?;
 
         // Retrieve daemon status
@@ -198,6 +220,7 @@ impl AppController {
     /// Automatically ensures rcm-agent is running (spawning it in background if needed)
     /// and that rclone daemon is installed and started without requiring manual steps (UX zero-friction)
     pub async fn ensure_connected_and_ready(&self, pipe_name: &str) -> Result<(), rcm_core::CoreError> {
+        let _guard = self.tokio_handle.enter();
         // Step 1: Connect to agent or auto-spawn if not running
         let ipc = match IpcClient::connect(pipe_name).await {
             Ok(c) => c,

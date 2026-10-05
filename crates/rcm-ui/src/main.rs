@@ -9,6 +9,7 @@ fn main() {
     let pipe_name = format!("rcm-{}", username);
 
     let app = AppController::new();
+    let _guard = app.tokio_handle().enter();
 
     // Start native GPUI Desktop Application (SRDD §1.1, §2.4, §6.1, §7.11)
     gpui_kit::application().run(move |cx| {
