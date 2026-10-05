@@ -1,4 +1,7 @@
+use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
 use tokio::sync::RwLock;
 use rcm_core::DaemonState;
 use rcm_ipc::protocol::RcConnectionInfo;
@@ -190,6 +193,153 @@ impl AppController {
 
         Ok(())
     }
+
+    /// Automatically ensures rcm-agent is running (spawning it in background if needed)
+    /// and that rclone daemon is installed and started without requiring manual steps (UX zero-friction)
+    pub async fn ensure_connected_and_ready(&self, pipe_name: &str) -> Result<(), rcm_core::CoreError> {
+        // Step 1: Connect to agent or auto-spawn if not running
+        let ipc = match IpcClient::connect(pipe_name).await {
+            Ok(c) => c,
+            Err(_) => {
+                // Agent not running: attempt to auto-spawn in background
+                let agent_exe = find_agent_binary();
+                if let Some(exe_path) = agent_exe {
+                    let mut cmd = Command::new(&exe_path);
+                    cmd.arg("--background").arg("--pipe").arg(pipe_name);
+
+                    #[cfg(windows)]
+                    {
+                        use std::os::windows::process::CommandExt;
+                        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+                    }
+
+                    let _ = cmd.spawn();
+
+                    // Retry connecting
+                    let mut connected = None;
+                    for _ in 0..35 {
+                        sleep(Duration::from_millis(100)).await;
+                        if let Ok(c) = IpcClient::connect(pipe_name).await {
+                            connected = Some(c);
+                            break;
+                        }
+                    }
+
+                    match connected {
+                        Some(c) => c,
+                        None => {
+                            return Err(rcm_core::CoreError::Connection(format!(
+                                "Failed to connect to rcm-agent after spawning '{}'",
+                                exe_path
+                            )));
+                        }
+                    }
+                } else {
+                    return Err(rcm_core::CoreError::NotFound(
+                        "rcm-agent executable could not be located to auto-start".to_string(),
+                    ));
+                }
+            }
+        };
+
+        // Step 2: Ensure daemon is running
+        let status_val = ipc.call("daemon.status", serde_json::json!({})).await?;
+        let mut state: DaemonState = serde_json::from_value(status_val).unwrap_or(DaemonState::Stopped);
+
+        if !state.is_ready() {
+            // Try starting daemon
+            let start_res = ipc.call("daemon.start", serde_json::json!({})).await;
+            match start_res {
+                Ok(_) => {
+                    sleep(Duration::from_millis(300)).await;
+                    let new_status = ipc.call("daemon.status", serde_json::json!({})).await?;
+                    state = serde_json::from_value(new_status).unwrap_or(DaemonState::Stopped);
+                }
+                Err(err) => {
+                    let err_msg = err.to_string();
+                    if err_msg.contains("No registered rclone binary found") {
+                        // Auto-fetch latest rclone binary!
+                        println!("First run setup: automatically downloading official rclone release...");
+                        let _ = ipc.call("binary.fetch", serde_json::Value::Null).await?;
+                        let _ = ipc.call("daemon.start", serde_json::json!({})).await?;
+                        sleep(Duration::from_millis(300)).await;
+                        let new_status = ipc.call("daemon.status", serde_json::json!({})).await?;
+                        state = serde_json::from_value(new_status).unwrap_or(DaemonState::Stopped);
+                    } else {
+                        return Err(rcm_core::CoreError::Validation(format!(
+                            "Failed to start rclone daemon: {}",
+                            err
+                        )));
+                    }
+                }
+            }
+        }
+
+        // Step 3: Setup direct RC connection if ready
+        let rc_client = if state.is_ready() {
+            if let Ok(conn_val) = ipc.call("rc.connection_info", serde_json::json!({})).await {
+                if let Ok(info) = serde_json::from_value::<RcConnectionInfo>(conn_val) {
+                    Some(RcClient::new(
+                        info.addr,
+                        info.auth_user.as_deref(),
+                        info.auth_pass.as_deref(),
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let mut s = self.state.write().await;
+        s.daemon_state = state;
+        s.ipc_client = Some(ipc);
+        s.rc_client = rc_client;
+
+        Ok(())
+    }
+}
+
+fn find_agent_binary() -> Option<String> {
+    // 1. Next to current executable
+    if let Ok(cur) = std::env::current_exe() {
+        if let Some(dir) = cur.parent() {
+            let exe_name = if cfg!(windows) { "rcm-agent.exe" } else { "rcm-agent" };
+            let candidate = dir.join(exe_name);
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    // 2. Program files / local app data install location
+    #[cfg(windows)]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let candidate = std::path::Path::new(&local_app_data)
+                .join("Programs")
+                .join("RCM")
+                .join("rcm-agent.exe");
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let candidate = std::path::Path::new(&home)
+                .join(".local")
+                .join("bin")
+                .join("rcm-agent");
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    None
 }
 
 impl Default for AppController {

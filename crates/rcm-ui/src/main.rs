@@ -1,9 +1,8 @@
 use rcm_ui::app::AppController;
+use rcm_ui::tui::TuiApp;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Launching Rclone Manager (RCM) Desktop UI...");
-
     let username = std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_else(|_| "default".to_string());
@@ -11,14 +10,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = AppController::new();
 
-    // Attempt connecting to the background resident agent (DM-7)
-    match app.connect_to_agent(&pipe_name).await {
-        Ok(_) => println!("Connected to rcm-agent via IPC."),
-        Err(e) => println!("Notice: rcm-agent is not running ({}). Start it with 'rcmctl start' or run 'rcm-agent'.", e),
+    // Zero-friction auto-connect & bootstrap:
+    // Automatically ensures rcm-agent is running (auto-spawning in background if needed)
+    // and ensures rclone is downloaded, verified, and running!
+    if let Err(e) = app.ensure_connected_and_ready(&pipe_name).await {
+        eprintln!("Initialization notice: {}. Continuing to interface...", e);
     }
 
-    let dashboard = app.get_dashboard_view_model().await;
-    println!("Dashboard initialized. Daemon state: {:?}", dashboard.daemon_state);
+    // Launch interactive UI
+    let mut tui = TuiApp::new(app);
+    tui.run().await?;
 
     Ok(())
 }
