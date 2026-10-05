@@ -126,7 +126,13 @@ impl RcClient {
 
     pub async fn list_commands(&self) -> Result<Vec<String>, RcError> {
         let res: RcListResponse = self.call("rc/list", serde_json::json!({})).await?;
-        Ok(res.commands.unwrap_or_default())
+        let paths = res
+            .commands
+            .unwrap_or_default()
+            .into_iter()
+            .map(|c| c.path)
+            .collect();
+        Ok(paths)
     }
 
     pub async fn version(&self) -> Result<VersionResponse, RcError> {

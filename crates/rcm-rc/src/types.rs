@@ -231,14 +231,26 @@ pub struct OAuthStatusResponse {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RcCallInfo {
+    #[serde(rename = "Path", default)]
+    pub path: String,
+    #[serde(rename = "Title", default)]
+    pub title: String,
+    #[serde(rename = "Help", default)]
+    pub help: String,
+    #[serde(rename = "NoAuth", default)]
+    pub no_auth: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RcListResponse {
     #[serde(default)]
-    pub commands: Option<Vec<String>>,
+    pub commands: Option<Vec<RcCallInfo>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct OptionsInfoResponse {
     #[serde(flatten)]
-    pub groups: BTreeMap<String, BTreeMap<String, OptionSchema>>,
+    pub groups: BTreeMap<String, Vec<OptionSchema>>,
 }

@@ -17,13 +17,12 @@ impl Drop for RcdProcess {
 }
 
 fn find_rclone_exe() -> Option<PathBuf> {
-    let candidate = PathBuf::from("../../rman-scratchbox/rclone-v1.75.1-windows-amd64/rclone.exe");
-    if candidate.exists() {
-        return Some(candidate);
-    }
-    let candidate2 = PathBuf::from("../rman-scratchbox/rclone-v1.75.1-windows-amd64/rclone.exe");
-    if candidate2.exists() {
-        return Some(candidate2);
+    // 1. Check RCLONE_EXE environment variable if provided by CI or developer
+    if let Ok(val) = std::env::var("RCLONE_EXE") {
+        let p = PathBuf::from(val);
+        if p.exists() {
+            return Some(p);
+        }
     }
     None
 }
@@ -85,7 +84,7 @@ async fn test_real_rclone_rc_integration() {
 
     // 2. version
     let ver = client.version().await.unwrap();
-    assert!(ver.version.contains("1.75"));
+    assert!(!ver.version.is_empty());
 
     // 3. obscure
     let obscured = client.obscure("supersecret").await.unwrap();
@@ -100,7 +99,13 @@ async fn test_real_rclone_rc_integration() {
     assert!(has_s3);
     assert!(has_drive);
 
-    // 5. options/info
-    let opts = client.options_info().await.unwrap();
-    assert!(opts.groups.contains_key("vfs") || opts.groups.contains_key("main"));
+    // 5. feature detection via rc/list (SRDD §7.2)
+    let commands = client.list_commands().await.unwrap();
+    assert!(!commands.is_empty());
+    assert!(commands.contains(&"core/version".to_string()));
+
+    if commands.contains(&"options/info".to_string()) {
+        let opts = client.options_info().await.unwrap();
+        assert!(opts.groups.contains_key("vfs") || opts.groups.contains_key("main"));
+    }
 }

@@ -11,6 +11,8 @@ camino = { workspace = true }
 thiserror = { workspace = true }
 directories = { workspace = true }
 open = { workspace = true }
+keyring = { workspace = true }
+uuid = { workspace = true }
 tracing = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
