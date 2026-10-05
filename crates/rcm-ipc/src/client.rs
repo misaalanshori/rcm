@@ -9,10 +9,11 @@ use tokio::sync::Mutex;
 use rcm_core::CoreError;
 use crate::protocol::{IpcRequest, IpcResponse};
 
+#[derive(Clone)]
 pub struct IpcClient {
     writer: Arc<Mutex<SendHalf>>,
     reader: Arc<Mutex<BufReader<RecvHalf>>>,
-    next_id: AtomicU64,
+    next_id: Arc<AtomicU64>,
 }
 
 impl IpcClient {
@@ -30,7 +31,7 @@ impl IpcClient {
         Ok(Self {
             writer: Arc::new(Mutex::new(writer)),
             reader: Arc::new(Mutex::new(BufReader::new(reader))),
-            next_id: AtomicU64::new(1),
+            next_id: Arc::new(AtomicU64::new(1)),
         })
     }
 

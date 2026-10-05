@@ -220,7 +220,17 @@ impl AppController {
     /// Automatically ensures rcm-agent is running (spawning it in background if needed)
     /// and that rclone daemon is installed and started without requiring manual steps (UX zero-friction)
     pub async fn ensure_connected_and_ready(&self, pipe_name: &str) -> Result<(), rcm_core::CoreError> {
-        let _guard = self.tokio_handle.enter();
+        let app = self.clone();
+        let pipe = pipe_name.to_string();
+        self.tokio_handle
+            .spawn(async move {
+                app.ensure_connected_and_ready_internal(&pipe).await
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Task execution failed: {}", e)))?
+    }
+
+    async fn ensure_connected_and_ready_internal(&self, pipe_name: &str) -> Result<(), rcm_core::CoreError> {
         // Step 1: Connect to agent or auto-spawn if not running
         let ipc = match IpcClient::connect(pipe_name).await {
             Ok(c) => c,
@@ -324,6 +334,162 @@ impl AppController {
         s.rc_client = rc_client;
 
         Ok(())
+    }
+
+    /// Fetches all latest UI data from IPC agent and direct RC connection
+    pub async fn fetch_ui_data(
+        &self,
+    ) -> (
+        DaemonState,
+        Vec<RemoteItemViewModel>,
+        Vec<MountItemViewModel>,
+        Vec<ServeItemViewModel>,
+    ) {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                app.fetch_ui_data_internal().await
+            })
+            .await
+            .unwrap_or_else(|_| (DaemonState::Stopped, Vec::new(), Vec::new(), Vec::new()))
+    }
+
+    async fn fetch_ui_data_internal(
+        &self,
+    ) -> (
+        DaemonState,
+        Vec<RemoteItemViewModel>,
+        Vec<MountItemViewModel>,
+        Vec<ServeItemViewModel>,
+    ) {
+        let state_arc = self.state();
+        let mut daemon_state = DaemonState::Stopped;
+        let mut remotes_list = Vec::new();
+        let mut mounts_list = Vec::new();
+        let mut serves_list = Vec::new();
+
+        let (ipc_opt, mut rc_opt) = {
+            let s = state_arc.read().await;
+            (s.ipc_client.clone(), s.rc_client.clone())
+        };
+
+        if let Some(ref ipc) = ipc_opt {
+            if let Ok(st_val) = ipc.call("daemon.status", serde_json::json!({})).await {
+                if let Ok(st) = serde_json::from_value::<DaemonState>(st_val) {
+                    daemon_state = st.clone();
+                    if st.is_ready() && rc_opt.is_none() {
+                        if let Ok(conn_val) = ipc.call("rc.connection_info", serde_json::json!({})).await {
+                            if let Ok(info) = serde_json::from_value::<RcConnectionInfo>(conn_val) {
+                                let new_rc = RcClient::new(
+                                    info.addr,
+                                    info.auth_user.as_deref(),
+                                    info.auth_pass.as_deref(),
+                                );
+                                rc_opt = Some(new_rc.clone());
+                                state_arc.write().await.rc_client = Some(new_rc);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Mount profiles
+            if let Ok(m_val) = ipc.call("profiles.list_mounts", serde_json::json!({})).await {
+                if let Ok(profiles) = serde_json::from_value::<Vec<rcm_core::MountProfile>>(m_val) {
+                    for p in profiles {
+                        let target_str = match &p.target {
+                            rcm_core::MountTarget::DriveLetter(c) => format!("{}:", c),
+                            rcm_core::MountTarget::AutoDriveLetter => "Auto (*)".to_string(),
+                            rcm_core::MountTarget::Folder(path) => path.to_string(),
+                            rcm_core::MountTarget::Unc(u) => u.clone(),
+                        };
+                        mounts_list.push(MountItemViewModel {
+                            id: p.id,
+                            name: p.name,
+                            remote: p.remote,
+                            target: target_str,
+                            preset: format!("{:?}", p.preset),
+                            is_mounted: false,
+                            cache_used_bytes: None,
+                            upload_queue_count: 0,
+                        });
+                    }
+                }
+            }
+
+            // Serve profiles
+            if let Ok(s_val) = ipc.call("profiles.list_serves", serde_json::json!({})).await {
+                if let Ok(profiles) = serde_json::from_value::<Vec<rcm_core::ServeProfile>>(s_val) {
+                    for p in profiles {
+                        serves_list.push(ServeItemViewModel {
+                            id: p.id,
+                            name: p.name,
+                            remote: p.remote,
+                            protocol: p.protocol.to_string().to_uppercase(),
+                            addr: p.addr.clone(),
+                            is_running: false,
+                            url: format!("http://{}", p.addr),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Remotes from rcd
+        if let Some(ref rc) = rc_opt {
+            if let Ok(remotes) = rc.config_list_remotes().await {
+                for r in remotes {
+                    remotes_list.push(RemoteItemViewModel {
+                        name: r,
+                        backend_type: "cloud".to_string(),
+                        referrers: Vec::new(),
+                        is_env_defined: false,
+                        is_encrypted: false,
+                    });
+                }
+            }
+
+            // Check active running mounts to mark is_mounted
+            if let Ok(active_mounts) = rc.mount_list_mounts().await {
+                for m in &mut mounts_list {
+                    if active_mounts.iter().any(|act| {
+                        act.mount_point.trim_end_matches('\\').eq_ignore_ascii_case(m.target.trim_end_matches('\\'))
+                    }) {
+                        m.is_mounted = true;
+                    }
+                }
+            }
+        }
+
+        (daemon_state, remotes_list, mounts_list, serves_list)
+    }
+
+    pub async fn trigger_reconcile(&self) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref ipc) = s.ipc_client {
+                    let _ = ipc.call("reconcile.now", serde_json::json!({})).await;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Task execution failed: {}", e)))?
+    }
+
+    pub async fn trigger_restart_daemon(&self) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref ipc) = s.ipc_client {
+                    let _ = ipc.call("daemon.restart", serde_json::json!({})).await;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Task execution failed: {}", e)))?
     }
 }
 

@@ -73,7 +73,14 @@ impl Supervisor {
     /// Starts daemon: tries adoption first (DM-5), otherwise spawns new (DM-1, DM-2)
     pub async fn start(&self) -> Result<(), CoreError> {
         let bin_path = {
-            let mgr = self.binary_mgr.lock().await;
+            let mut mgr = self.binary_mgr.lock().await;
+            if mgr.get_current_binary_path().is_none() {
+                let _ = mgr.scan_and_auto_adopt();
+            }
+            if mgr.get_current_binary_path().is_none() {
+                info!("No rclone binary registered. Automatically fetching latest stable rclone...");
+                let _ = mgr.fetch_and_install_rclone(None);
+            }
             mgr.get_current_binary_path().ok_or_else(|| {
                 CoreError::NotFound("No registered rclone binary found".to_string())
             })?

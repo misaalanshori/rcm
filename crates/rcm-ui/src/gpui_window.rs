@@ -1,7 +1,7 @@
 use gpui_kit::component::badge::Badge;
 use gpui_kit::component::button::Button;
 use gpui_kit::*;
-use rcm_core::{DaemonState, MountProfile, MountTarget, ServeProfile};
+use rcm_core::DaemonState;
 use rcm_ui_kit::view_model::{MountItemViewModel, RemoteItemViewModel, ServeItemViewModel, SidebarDestination};
 use crate::app::AppController;
 
@@ -36,84 +36,12 @@ impl RcmDesktopWindow {
     pub fn refresh_state(&mut self, cx: &mut Context<Self>) {
         let app = self.app.clone();
         cx.spawn(async move |this, cx| {
-            let _guard = app.tokio_handle().enter();
-            let state_arc = app.state();
-            let s = state_arc.read().await;
-
-            let mut daemon_state = s.daemon_state.clone();
-            let mut remotes_list = Vec::new();
-            let mut mounts_list = Vec::new();
-            let mut serves_list = Vec::new();
-
-            if let Some(ref ipc) = s.ipc_client {
-                if let Ok(st_val) = ipc.call("daemon.status", serde_json::json!({})).await {
-                    if let Ok(st) = serde_json::from_value::<DaemonState>(st_val) {
-                        daemon_state = st;
-                    }
-                }
-
-                // Fetch mounts from profile store
-                if let Ok(m_val) = ipc.call("profiles.list_mounts", serde_json::json!({})).await {
-                    if let Ok(profiles) = serde_json::from_value::<Vec<MountProfile>>(m_val) {
-                        for p in profiles {
-                            let target_str = match &p.target {
-                                MountTarget::DriveLetter(c) => format!("{}:", c),
-                                MountTarget::AutoDriveLetter => "Auto (*)".to_string(),
-                                MountTarget::Folder(path) => path.to_string(),
-                                MountTarget::Unc(u) => u.clone(),
-                            };
-                            mounts_list.push(MountItemViewModel {
-                                id: p.id,
-                                name: p.name,
-                                remote: p.remote,
-                                target: target_str,
-                                preset: format!("{:?}", p.preset),
-                                is_mounted: false,
-                                cache_used_bytes: None,
-                                upload_queue_count: 0,
-                            });
-                        }
-                    }
-                }
-
-                // Fetch serves from profile store
-                if let Ok(s_val) = ipc.call("profiles.list_serves", serde_json::json!({})).await {
-                    if let Ok(profiles) = serde_json::from_value::<Vec<ServeProfile>>(s_val) {
-                        for p in profiles {
-                            serves_list.push(ServeItemViewModel {
-                                id: p.id,
-                                name: p.name,
-                                remote: p.remote,
-                                protocol: p.protocol.to_string().to_uppercase(),
-                                addr: p.addr.clone(),
-                                is_running: false,
-                                url: format!("http://{}", p.addr),
-                            });
-                        }
-                    }
-                }
-            }
-
-            // Fetch remotes if rcd client is active
-            if let Some(ref rc) = s.rc_client {
-                if let Ok(remotes) = rc.config_list_remotes().await {
-                    for r in remotes {
-                        remotes_list.push(RemoteItemViewModel {
-                            name: r.clone(),
-                            backend_type: "cloud".to_string(),
-                            referrers: Vec::new(),
-                            is_env_defined: false,
-                            is_encrypted: false,
-                        });
-                    }
-                }
-            }
-
+            let (daemon_state, remotes, mounts, serves) = app.fetch_ui_data().await;
             let _ = this.update(cx, |this, cx| {
                 this.daemon_state = daemon_state;
-                this.remotes = remotes_list;
-                this.mounts = mounts_list;
-                this.serves = serves_list;
+                this.remotes = remotes;
+                this.mounts = mounts;
+                this.serves = serves;
                 this.status_text = "Ready. Daemon running in background.".to_string();
                 cx.notify();
             });
@@ -127,13 +55,7 @@ impl RcmDesktopWindow {
         cx.notify();
 
         cx.spawn(async move |this, cx| {
-            let _guard = app.tokio_handle().enter();
-            let state_arc = app.state();
-            let s = state_arc.read().await;
-            if let Some(ref ipc) = s.ipc_client {
-                let _ = ipc.call("reconcile.now", serde_json::json!({})).await;
-            }
-            drop(s);
+            let _ = app.trigger_reconcile().await;
             let _ = this.update(cx, |this, cx| {
                 this.refresh_state(cx);
             });
@@ -147,13 +69,7 @@ impl RcmDesktopWindow {
         cx.notify();
 
         cx.spawn(async move |this, cx| {
-            let _guard = app.tokio_handle().enter();
-            let state_arc = app.state();
-            let s = state_arc.read().await;
-            if let Some(ref ipc) = s.ipc_client {
-                let _ = ipc.call("daemon.restart", serde_json::json!({})).await;
-            }
-            drop(s);
+            let _ = app.trigger_restart_daemon().await;
             let _ = this.update(cx, |this, cx| {
                 this.refresh_state(cx);
             });
