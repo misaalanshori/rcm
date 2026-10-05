@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document** | SRS + SDD (combined), v0.3 DRAFT |
+| **Document** | SRS + SDD (combined), v0.4 DRAFT |
 | **Date** | 2026-10-05 |
 | **Working title** | Rclone Manager ("RCM"). *Rename before launch: an unrelated Tauri-based "RClone Manager" already exists.* |
 | **Targets** | Windows 10/11 (x86_64, ARM64) primary; Linux (x86_64, aarch64) secondary |
@@ -11,6 +11,8 @@
 **Revision v0.2.** RCM no longer writes `rclone.conf`. rclone (`rcd`) is the only writer and RCM is a front end over its RC API. The custom atomic-writer / merge layer (former SW-1..5, former §7.5, the `rcm-conf` writer, former spikes S2/S3) is removed. Backups remain as read-only snapshots with a stop → swap → start restore. Rename/duplicate remote are emulated through RC (P1).
 
 **Revision v0.3.** Added §11.1: the project is built with strict Test-Driven Development, with an explicit rule that tests must catch unexpected breakage without adding friction when new behavior is introduced.
+
+**Revision v0.4.** Added the "minimal and lightweight without cutting features" principle (§5.1), provisional footprint budgets (NF-11..16), lightweight engineering techniques (§7.15), lazy rcd (DM-12), progressive disclosure (UX-6), a six-destination UI, and baseline spike S12.
 
 **How to read this.** §1–3 are context and research findings. §4–5 are the requirements (testable, ID'd). §6–9 are the design. §10–13 cover delivery, testing, roadmap, and risks. Items marked **(Spike Sx)** are claims I could not confirm from documentation and that must be verified by a prototype before the design depending on them is frozen (§13).
 
@@ -141,10 +143,12 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 | DM-4 | Crash recovery: restart with exponential backoff (1 s → 60 s cap); crash-loop breaker (5 crashes / 2 min) surfaces last log lines and stops retrying. | P0 |
 | DM-5 | On agent start, **adopt** a still-running compatible rcd (matching binary path and config path, answering with our credentials) instead of spawning a second. | P1 |
 | DM-6 | Autostart at login (agent only, background, no window): Windows HKCU `Run` entry; Linux `systemd --user` unit with XDG-autostart fallback. Toggle in UI and installer flag. | P0 |
-| DM-7 | Closing the UI never stops rcd. Quitting the agent from the tray stops rcd (configurable). | P0 |
+| DM-7 | Closing the UI never stops rcd, and the **UI process exits when its last window closes**; the agent is the only resident RCM process. Quitting the agent from the tray stops rcd (configurable). | P0 |
 | DM-8 | After rcd (re)start, reconcile desired mounts/serves (§7.6). If config is rclone-encrypted, unlock first via keyring (`config/unlock`) or prompt. | P0 |
 | DM-9 | Capture rcd stdout/stderr (structured logs via `--use-json-log`) into a ring buffer and rotating files; live log viewer with level control (`options/set` LogLevel). | P0 |
 | DM-10 | Single instance per user for agent and UI; second UI launch focuses the first. | P0 |
+| DM-12 | **Lazy rcd** (setting, default on): if no mount/serve is set to autostart and no UI is open, rcd is not kept running. It starts on demand (UI opens, a mount is requested, a scheduled job fires) and stops after an idle grace period (default 10 min, never while mounts, serves or jobs are active). | P1 |
+| DM-13 | Optional memory cap for rclone via `debug/set-soft-memory-limit` (and GC percent), applied after each rcd start. | P1 |
 | DM-11 | Tray icon: status glyph, quick mount/unmount toggles, open UI, pause transfers, quit. Linux uses StatusNotifierItem; where unavailable (stock GNOME) the UI remains launchable and a notice explains. | P1 |
 
 ### 4.2 Bundled rclone and updates (BU)
@@ -234,9 +238,10 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 | ID | Requirement | Pri |
 |---|---|---|
 | UX-1 | Dashboard with daemon state, active mounts/serves, running jobs, recent errors. | P0 |
-| UX-2 | Command palette (Ctrl/Cmd+K), full keyboard navigation, light/dark following system. | P1 |
+| UX-2 | Command palette (Ctrl/Cmd+K) as the route to the long tail of features (so the sidebar stays short), full keyboard navigation, light/dark following system. | P1 |
 | UX-3 | Every secret field masked by default with explicit reveal; secrets never in logs or diagnostics. | P0 |
 | UX-4 | Diagnostics export (redacted): versions, capabilities, GPU adapter, recent logs, redacted config structure. | P1 |
+| UX-6 | **Progressive disclosure:** each screen shows only the primary path by default (presets, essential fields, one primary action); advanced and rare options are one explicit step away. Nothing is removed, only deferred (§5.1). | P0 |
 | UX-5 | Localization-ready string layer (English only in v1). | P2 |
 
 ---
@@ -255,6 +260,27 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 | NF-8 | Accessibility | Keyboard-complete; AccessKit roles/names on all controls; screen-reader smoke test per release **(Spike S1)** |
 | NF-9 | Privacy | No telemetry, no network calls except rclone update checks and user-initiated actions |
 | NF-10 | Maintainability | Compile-time isolation of GPUI; strict TDD per §11.1 (tests pin behavior, not implementation); ≥ 80% unit coverage in non-UI crates; crate dependency direction enforced in CI; `cargo-deny`/`audit` gating |
+| NF-11 | UI process memory while open | provisional ≲ 150 MB with a 10k-row list; baseline set by Spike S12 |
+| NF-12 | Resident footprint when UI is closed | exactly the agent (+ rcd, optional per DM-12); no resident UI process |
+| NF-13 | Size of RCM's own binaries | provisional ≲ 40 MB on disk in total (excluding rclone, which will dominate); RCM's share of the download ≲ 20 MB compressed |
+| NF-14 | Idle behavior | agent wake-ups only for the 5 s health check and OS/file events; UI performs no redraws or RC calls while idle or hidden |
+| NF-15 | Dependency discipline | transitive crate count tracked per binary in CI with a ceiling fixed after the M1 baseline; every new direct dependency is justified in the change description |
+| NF-16 | No network stack in RCM v1 | RCM binaries contain no TLS/HTTP-client stack; all internet access (update checks, downloads) is done by rclone or the installer script. Revisit when RCM self-update is added |
+
+
+### 5.1 Principle: minimal and lightweight, without cutting features
+
+RCM is a small tool in front of a large one. It must feel like a lightweight utility: tiny resident footprint, instant to open, quiet when idle, with a visually minimal UI, **while still exposing every capability in §4**. Lightweight is achieved by *reuse and discipline*, not by removing features.
+
+1. **Reuse rclone, don't rebuild it.** Capability comes from rclone's own metadata: schema-driven forms (§7.3), the wizard driver (§7.4), the generated command catalog (§7.8). One generic renderer covers every backend and flag, which is how "everything" fits in a small codebase. New per-backend or per-flag UI code is a design smell.
+2. **Minimal surface, full depth.** Six sidebar destinations (§7.11). Defaults and presets first; advanced is one step away (UX-6); rare features live in Settings and the command palette. Every on-screen element must serve a P0/P1 requirement.
+3. **Minimal resident footprint.** Only the agent and rcd run in the background. The UI process exits when closed (DM-7), rcd can be lazy (DM-12), and the agent contains no graphics code.
+4. **Idle means idle (NF-14).** Event-driven wherever possible; RC polling happens only while there is something to watch; hidden views stop updating.
+5. **Pay only for what is used.** Heavy widgets or features (code editor, charts, Markdown/HTML rendering, Tree-sitter grammars) are linked only if a requirement needs them, with the smallest feature set. Prefer small crates and the standard library; justify each dependency (size, maintenance, license).
+6. **Budgets are tests.** NF-1 and NF-11..16 are measured in CI on release builds; a budget regression is an *unexpected red* under §11.1.
+7. **No bloat by construction:** no embedded browser/webview, no bundled runtime besides rclone, no telemetry, no resident updater service, no installer framework (a script plus a zip).
+
+Numeric budgets are provisional until Spike S12 measures a GPUI Kit baseline on both platforms; they are then adjusted deliberately in this document rather than silently exceeded.
 
 ---
 
@@ -288,7 +314,7 @@ Priority: **P0** = v1 must, **P1** = v1 should, **P2** = later.
 | `rcm-ui` | binary: views, view-models, schema-form renderer |
 | `rcm-xtask` | codegen (command/serve catalogs), packaging, release |
 
-Key crates (versions pinned at start; verify current): `tokio`, `reqwest` (rustls), `serde`/`serde_json`, `toml_edit`, `rusqlite`, `tracing`, `thiserror`, `clap`, `interprocess` (local sockets/named pipes, tokio), `notify`, `fs4` (locks), `keyring`, `windows` (Win32), `tray-icon` or `ksni`, `age`, `sha2`, `semver`, `zeroize`, `open`, `directories`, `camino`.
+Key crates (versions pinned at start; verify current): `tokio`, `reqwest` (rustls), `serde`/`serde_json`, `toml_edit`, `tracing`, `thiserror`, `clap`, `interprocess` (local sockets/named pipes, tokio), `notify`, `fs4` (locks), `keyring`, `windows` (Win32), `tray-icon` or `ksni`, `age`, `sha2`, `semver`, `zeroize`, `open`, `directories`, `camino`.
 
 ### 6.3 Runtime dataflow (create remote)
 
@@ -453,21 +479,21 @@ Update transaction: `selfupdate --check` → `selfupdate --version X --output <d
 
 ### 7.11 UI design (GPUI)
 
-**Information architecture:** Sidebar → Dashboard · Remotes · Mounts · Serves · Transfers · Explorer · Tools · Backups · Settings (Daemon, rclone version, Startup, Logs, Appearance, Advanced).
+**Information architecture (six destinations by design, §5.1):** Sidebar → Home · Remotes · Mounts · Serves · Files (explorer + transfers) · Settings (daemon, rclone version, startup, backups, logs, tools/command runner, appearance, advanced). The command palette reaches everything else.
 
 ```
 ┌ title bar ────────────────────────────────────────────────────────────┐
 │ ● rclone 1.74.x ready    mounts 3  serves 1  jobs 0        [Ctrl+K]   │
 ├────────┬──────────────────────────────────────────────────────────────┤
-│Dashboard│  Mounts                                    [+ New mount]     │
+│Home     │  Mounts                                    [+ New mount]     │
 │Remotes  │  ┌──────────────────────────────────────────────────────┐   │
 │Mounts ◀ │  │ G:  gdrive:/Media     ● mounted   Streaming   ⋯      │   │
 │Serves   │  │ H:  s3:backup         ○ stopped   Balanced    ⋯      │   │
-│Transfers│  └──────────────────────────────────────────────────────┘   │
-│Explorer │  ▸ Details: VFS cache 1.2 GB · uploads queued 0 · errors 0   │
-│Tools    │  [Open] [Unmount] [Restart] [Copy as CLI]                    │
-│Backups  │                                                              │
-│Settings │                                                              │
+│Files    │  └──────────────────────────────────────────────────────┘   │
+│Settings │  ▸ Details: VFS cache 1.2 GB · uploads queued 0 · errors 0   │
+│         │  [Open] [Unmount] [Restart] [Copy as CLI]                    │
+│         │                                                              │
+│         │                                                              │
 └────────┴──────────────────────────────────────────────────────────────┘
 ```
 
@@ -490,6 +516,21 @@ Update transaction: `selfupdate --check` → `selfupdate --version X --output <d
 ### 7.14 IPC (agent ↔ UI)
 JSON-RPC 2.0 over local sockets (Windows named pipe with a user-only DACL; Linux Unix socket 0600 in `$XDG_RUNTIME_DIR`). Handshake `{protocol_version, app_version}`; methods: `daemon.start|stop|restart|status`, `rc.connection_info` (returns transport + credentials to the authenticated UI), `profiles.*`, `reconcile.now`, `backups.*`, `settings.*`; server-push events. Backward compatibility: additive changes only within a major protocol version; the UI offers to restart a mismatched agent.
 
+
+### 7.15 Lightweight engineering techniques (implements §5.1)
+
+- **Build profile (all binaries):** `lto = "fat"`, `codegen-units = 1`, `strip = "symbols"`; `opt-level = "s"` for agent and CLI (measure against `3`); `panic = "abort"` for agent and CLI (UI follows what GPUI supports). Windows builds link the CRT statically.
+- **Fewer binaries:** `rcmctl` is the same executable as `rcm-agent` invoked under a different name/subcommand (multi-call), so there are two RCM executables, not three. Plus `rclone`.
+- **Agent runtime:** single-threaded Tokio (`current_thread`) with only the needed features (`rt`, `net`, `time`, `process`, `sync`, `io-util`); never `features = ["full"]`.
+- **No network stack in RCM (NF-16):** the RC client talks plain HTTP to loopback (hyper-level client, no TLS, no cookies, no compression). Internet access is rclone's job (`selfupdate`), so no `reqwest`/rustls in v1. *(This revises the crate list in §6.2 accordingly.)*
+- **Untyped where rclone is open-ended:** option values travel as `serde_json::Value` plus metadata; no generated typed structs per backend or flag. Typed wrappers exist only for the ~45 calls RCM drives itself.
+- **Storage:** TOML for settings and profiles; rotating JSONL for job history and logs; plain files for snapshots. SQLite is added only if a measured query need appears.
+- **UI weight:** use `gpui-kit` through the adapter crate with default features trimmed; no code-editor or Tree-sitter grammars unless the log/section viewers prove they need them; bundle only the Lucide SVG icons actually used (build-time subset); use system fonts; virtualized lists everywhere; bounded in-memory log buffer (default 5,000 lines, remainder on disk); `operations/list` results for huge directories are paged in the view with a warning.
+- **Fast first paint:** the UI paints its shell immediately and loads data asynchronously with skeleton states; no RC call on the render path; the agent starts rcd without waiting for any UI.
+- **Idle discipline:** hidden windows unsubscribe from event streams; job polling exists only while jobs exist; file watcher is debounced; no timers faster than the 5 s health check except during active user-visible operations.
+- **Installer weight:** zip + ~100-line script, per-user, no MSI/EXE framework, no background installer or updater service; uninstall removes everything RCM-owned.
+- **Measurement in CI:** `cargo-bloat`, `cargo-udeps`, `cargo tree -d` (duplicate crates), `cargo-deny`, a release-size check, and a benchmark job recording agent idle RSS, UI open RSS, cold start, and idle CPU/GPU wake-ups. Results are compared against NF budgets.
+
 ---
 
 ## 8. Data and on-disk layout
@@ -499,7 +540,7 @@ JSON-RPC 2.0 over local sockets (Windows named pipe with a user-only DACL; Linux
 | Install dir | `%LOCALAPPDATA%\Programs\RCM\` (`rcm.exe`, `rcm-agent.exe`, `rcmctl.exe`) | `~/.local/share/rcm/app/` + symlinks in `~/.local/bin` |
 | rclone versions | `%LOCALAPPDATA%\RCM\rclone\<ver>\` | `~/.local/share/rcm/rclone/<ver>/` |
 | Settings & profiles (TOML, versioned, atomic writes) | `%APPDATA%\RCM\` | `~/.config/rcm/` |
-| History DB (SQLite), logs, backups, state | `%LOCALAPPDATA%\RCM\` | `~/.local/share/rcm/`, `~/.local/state/rcm/` |
+| History store (rotating JSONL), logs, backups, state | `%LOCALAPPDATA%\RCM\` | `~/.local/share/rcm/`, `~/.local/state/rcm/` |
 | rclone config (default, user-overridable) | `%APPDATA%\rclone\rclone.conf` | `~/.config/rclone/rclone.conf` |
 | Runtime sockets/pids | named pipe / `state\` | `$XDG_RUNTIME_DIR/rcm/` |
 
@@ -601,7 +642,7 @@ RCM is developed with **strict Test-Driven Development**: no production behavior
 
 | Milestone | Content | Size |
 |---|---|---|
-| **M0 Spikes** | S1–S11 (§13); decide transport, tray, GPUI Kit version, schema coverage | M |
+| **M0 Spikes** | S1–S12 (§13); decide transport, tray, GPUI Kit version, schema coverage | M |
 | **M1 Foundation** | workspace, `rcm-rc`, supervisor, agent, IPC, health/log capture, binary layout, **test harness** (fake RC server, pinned-rclone fixtures, transcript recorder, `expected-red.toml` CI job, dependency-direction check) | L |
 | **M2 Config** | schema form engine, wizard driver, remotes UI (RC-only), mutation queue, snapshots/restore, rename/duplicate emulation | L |
 | **M3 Mounts** | profiles, presets, advanced panel, WinFsp/FUSE checks, reconciler, tray | L |
@@ -631,6 +672,7 @@ MVP cut for a first public beta: M0–M3 + minimal M6 (installer, autostart, rcl
 | S9 | rclone PGP key verification in CI (DSA/SHA-1) and whether to ever verify in-app | Delegate to `selfupdate --output`; CI-only gpg |
 | S10 | `fscache/clear` + mount restart semantics after remote edits | Always prompt for restart |
 | S11 | Mark-of-the-Web absence for `irm\|iex` on current Windows builds; Smart App Control behavior on signed-new binaries | Provide signed MSI/zip alternative |
+| S12 | **Footprint baseline:** GPUI Kit hello-world and a 10k-row virtualized table on Win11 and Linux (release size, idle/open RSS, cold start, idle CPU/GPU wake-ups); agent skeleton RSS and size with the planned dependency set | Adjust NF-11/NF-13 deliberately; trim GPUI Kit features; evaluate upstream GPUI directly |
 
 ### 13.2 Risk register
 
@@ -713,6 +755,7 @@ raw = []
 - Edit a remote in RCM while rclone refreshes OAuth tokens: both changes preserved (rclone is the sole writer).
 - Update rclone to a newer version and force a failing smoke test: automatic rollback with mounts restored.
 - Every advanced mount/serve flag in the pinned rclone is reachable from the UI or the pass-through field.
+- Footprint: NF-1 and NF-11..16 are measured in CI on release builds and met, or consciously revised in this document after S12.
 - Process: main is green; every §4 requirement has a referencing test; CI reports any failing test outside `expected-red.toml` as an unexpected red; the dependency-direction check passes.
 
 ## Appendix E — Sources consulted
