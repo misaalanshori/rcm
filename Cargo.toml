@@ -37,6 +37,8 @@ toml = "0.8"
 thiserror = "2.0"
 camino = { version = "1.1", features = ["serde1"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
+# UI & Graphics (GPUI Kit)
+gpui-kit = "0.7.1"
 crossterm = "0.28"
 
 # Async & Networking (Loopback RC & Local IPC)
@@ -60,6 +62,9 @@ directories = "5.0"
 open = "5.3"
 
 # Profile optimizations per SRDD §7.15
+[profile.dev]
+debug = 1
+
 [profile.release]
 opt-level = 3
 lto = "fat"

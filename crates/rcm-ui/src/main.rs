@@ -1,8 +1,8 @@
+use gpui_kit::*;
 use rcm_ui::app::AppController;
-use rcm_ui::tui::TuiApp;
+use rcm_ui::gpui_window::RcmDesktopWindow;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     let username = std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_else(|_| "default".to_string());
@@ -10,16 +10,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = AppController::new();
 
-    // Zero-friction auto-connect & bootstrap:
-    // Automatically ensures rcm-agent is running (auto-spawning in background if needed)
-    // and ensures rclone is downloaded, verified, and running!
-    if let Err(e) = app.ensure_connected_and_ready(&pipe_name).await {
-        eprintln!("Initialization notice: {}. Continuing to interface...", e);
-    }
+    // Start native GPUI Desktop Application (SRDD §1.1, §2.4, §6.1, §7.11)
+    gpui_kit::application().run(move |cx| {
+        gpui_kit::init(cx);
 
-    // Launch interactive UI
-    let mut tui = TuiApp::new(app);
-    tui.run().await?;
+        let window_options = WindowOptions {
+            titlebar: Some(TitlebarOptions {
+                title: Some("Rclone Manager".into()),
+                ..Default::default()
+            }),
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                None,
+                size(px(1080.0), px(720.0)),
+                cx,
+            ))),
+            ..Default::default()
+        };
 
-    Ok(())
+        let app_clone = app.clone();
+
+        let _ = gpui_kit::open_window(window_options, cx, move |_window, cx| {
+            cx.new(|cx| {
+                let mut win = RcmDesktopWindow::new(app_clone);
+                win.refresh_state(cx);
+                win
+            })
+        });
+
+        // Spawn background connection/bootstrap task on App
+        cx.spawn(async move |_cx| {
+            let _ = app.ensure_connected_and_ready(&pipe_name).await;
+        })
+        .detach();
+    });
 }

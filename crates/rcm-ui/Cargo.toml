@@ -14,6 +14,7 @@ rcm-core = { workspace = true }
 rcm-rc = { workspace = true }
 rcm-ipc = { workspace = true }
 rcm-ui-kit = { workspace = true }
+gpui-kit = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

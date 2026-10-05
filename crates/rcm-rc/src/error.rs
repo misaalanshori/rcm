@@ -28,7 +28,7 @@ pub enum RcError {
     Http {
         status: u16,
         message: String,
-        raw: Option<RcRawError>,
+        raw: Option<Box<RcRawError>>,
     },
 
     #[error("Network/connection failed: {0}")]

@@ -1,5 +1,5 @@
 pub mod app;
-pub mod tui;
+pub mod gpui_window;
 
 pub use app::{AppController, AppState};
-pub use tui::TuiApp;
+pub use gpui_window::RcmDesktopWindow;

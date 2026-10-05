@@ -47,6 +47,7 @@ impl Default for AppState {
     }
 }
 
+#[derive(Clone)]
 pub struct AppController {
     state: Arc<RwLock<AppState>>,
 }
