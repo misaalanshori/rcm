@@ -14,5 +14,7 @@ rcm-core = { workspace = true }
 rcm-rc = { workspace = true }
 rcm-ipc = { workspace = true }
 rcm-ui-kit = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "macros"] }
 tracing = { workspace = true }
