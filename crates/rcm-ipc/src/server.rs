@@ -29,14 +29,16 @@ impl IpcServer {
 
     pub async fn run<H, Fut>(&self, handler: H)
     where
-        H: Fn(IpcRequest) -> Fut + Send + Sync + Copy + 'static,
+        H: Fn(IpcRequest) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<serde_json::Value, IpcError>> + Send + 'static,
     {
+        let handler = std::sync::Arc::new(handler);
         loop {
             match self.listener.accept().await {
                 Ok(conn) => {
+                    let h = handler.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = handle_connection(conn, handler).await {
+                        if let Err(e) = handle_connection(conn, h).await {
                             error!("IPC connection error: {}", e);
                         }
                     });
@@ -50,7 +52,7 @@ impl IpcServer {
     }
 }
 
-async fn handle_connection<H, Fut>(conn: Stream, handler: H) -> Result<(), CoreError>
+async fn handle_connection<H, Fut>(conn: Stream, handler: std::sync::Arc<H>) -> Result<(), CoreError>
 where
     H: Fn(IpcRequest) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<serde_json::Value, IpcError>> + Send + 'static,

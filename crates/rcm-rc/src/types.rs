@@ -97,7 +97,7 @@ pub struct PathsResponse {
     pub temp: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct MountInfo {
     #[serde(rename = "Fs", default)]
     pub fs: String,
@@ -121,7 +121,7 @@ pub struct MountTypesResponse {
     pub mount_types: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ServeInfo {
     #[serde(default)]
     pub id: Option<u64>,
