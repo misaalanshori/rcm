@@ -9,7 +9,7 @@ use crate::types::{OAuthStatusResponse, OptionSchema, WizardStepResponse};
 pub enum WizardStep {
     AskQuestion {
         state: String,
-        option: OptionSchema,
+        option: Box<OptionSchema>,
         error: Option<String>,
     },
     OAuthInProgress {
@@ -156,7 +156,7 @@ impl WizardDriver {
             };
             return Ok(WizardStep::AskQuestion {
                 state: step_resp.state,
-                option: opt,
+                option: Box::new(opt),
                 error: err_opt,
             });
         }

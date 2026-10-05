@@ -42,7 +42,7 @@ pub enum RcError {
         status: Option<u16>,
         message: String,
         path: Option<String>,
-        raw: RcRawError,
+        raw: Box<RcRawError>,
     },
 
     #[error("Wizard error: {0}")]

@@ -102,7 +102,7 @@ impl RcClient {
                     status: Some(status.as_u16()),
                     message: msg,
                     path: Some(path.to_string()),
-                    raw,
+                    raw: Box::new(raw),
                 });
             } else {
                 return Err(RcError::Http {
@@ -427,7 +427,7 @@ impl RcClient {
 /// Simple RFC 4648 standard base64 encoding without external dependencies (§7.15)
 fn simple_base64_encode(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
 
     for chunk in input.chunks(3) {
         let b0 = chunk[0];
