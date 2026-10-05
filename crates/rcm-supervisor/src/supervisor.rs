@@ -47,6 +47,21 @@ impl Supervisor {
         self.log_buffer.clone()
     }
 
+    pub async fn fetch_rclone(&self, version: Option<&str>) -> Result<String, CoreError> {
+        let mut mgr = self.binary_mgr.lock().await;
+        mgr.fetch_and_install_rclone(version)
+    }
+
+    pub async fn register_rclone(&self, path: &camino::Utf8Path) -> Result<String, CoreError> {
+        let mut mgr = self.binary_mgr.lock().await;
+        mgr.register_existing_binary(path)
+    }
+
+    pub async fn current_binary_version(&self) -> Option<String> {
+        let mgr = self.binary_mgr.lock().await;
+        mgr.current_version().map(String::from)
+    }
+
     pub async fn current_state(&self) -> DaemonState {
         self.health_mon.read().await.current_state().clone()
     }

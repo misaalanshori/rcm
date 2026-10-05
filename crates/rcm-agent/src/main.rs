@@ -234,6 +234,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let logs = sup.log_buffer().get_recent();
                         Ok(serde_json::to_value(logs).unwrap())
                     }
+                    "binary.fetch" => {
+                        let ver_param: Option<String> = serde_json::from_value(req.params).ok().flatten();
+                        let installed_ver = sup.fetch_rclone(ver_param.as_deref()).await.map_err(to_ipc_error)?;
+                        Ok(serde_json::json!({ "version": installed_ver }))
+                    }
+                    "binary.register" => {
+                        let path_str: String = serde_json::from_value(req.params).map_err(|e| {
+                            IpcError { code: -32602, message: e.to_string() }
+                        })?;
+                        let p = Utf8PathBuf::from(path_str);
+                        let ver = sup.register_rclone(&p).await.map_err(to_ipc_error)?;
+                        Ok(serde_json::json!({ "version": ver }))
+                    }
+                    "binary.status" => {
+                        let cur = sup.current_binary_version().await;
+                        Ok(serde_json::json!({ "current": cur }))
+                    }
                     _ => Err(IpcError {
                         code: -32601,
                         message: format!("Unknown method: {}", req.method),

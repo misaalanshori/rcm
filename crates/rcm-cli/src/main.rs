@@ -41,6 +41,18 @@ enum Commands {
 
     #[command(about = "List configured serve profiles")]
     ListServes,
+
+    #[command(about = "Fetch and install official rclone binary")]
+    FetchRclone {
+        #[arg(long, help = "Specific version to fetch (e.g. v1.75.1; defaults to latest stable)")]
+        version: Option<String>,
+    },
+
+    #[command(about = "Register an existing rclone executable into managed storage")]
+    RegisterRclone {
+        #[arg(help = "Path to existing rclone executable")]
+        path: String,
+    },
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -118,6 +130,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::ListServes => {
             let res = client.call("profiles.list_serves", serde_json::json!({})).await?;
             println!("{}", serde_json::to_string_pretty(&res)?);
+        }
+        Commands::FetchRclone { version } => {
+            println!("Fetching and installing rclone binary (target: {:?})...", version.as_deref().unwrap_or("latest"));
+            let res = client.call("binary.fetch", serde_json::to_value(version)?).await?;
+            println!("Installed: {}", res);
+        }
+        Commands::RegisterRclone { path } => {
+            let abs_path = std::fs::canonicalize(&path)
+                .map(|p| p.to_string_lossy().trim_start_matches(r"\\?\").to_string())
+                .unwrap_or(path);
+            let res = client.call("binary.register", serde_json::Value::String(abs_path)).await?;
+            println!("Registered: {}", res);
         }
         Commands::PrintConfigPass { .. } => unreachable!(),
     }
