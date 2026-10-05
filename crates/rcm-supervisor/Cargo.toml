@@ -1,0 +1,18 @@
+[package]
+name = "rcm-supervisor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+rcm-core = { workspace = true }
+rcm-rc = { workspace = true }
+rcm-config = { workspace = true }
+rcm-platform = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+camino = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time", "process", "io-util"] }
+tracing = { workspace = true }

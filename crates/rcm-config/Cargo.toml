@@ -1,0 +1,17 @@
+[package]
+name = "rcm-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+rcm-core = { workspace = true }
+rcm-rc = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+camino = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time", "fs", "io-util"] }
+notify = { workspace = true }
+tracing = { workspace = true }

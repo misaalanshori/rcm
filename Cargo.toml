@@ -1,0 +1,64 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rcm-core",
+    "crates/rcm-rc",
+    "crates/rcm-config",
+    "crates/rcm-supervisor",
+    "crates/rcm-platform",
+    "crates/rcm-ipc",
+    "crates/rcm-agent",
+    "crates/rcm-cli",
+    "crates/rcm-ui-kit",
+    "crates/rcm-ui",
+    "crates/rcm-xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["RCM Contributors"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Internal workspace crates
+rcm-core = { path = "crates/rcm-core" }
+rcm-rc = { path = "crates/rcm-rc" }
+rcm-config = { path = "crates/rcm-config" }
+rcm-supervisor = { path = "crates/rcm-supervisor" }
+rcm-platform = { path = "crates/rcm-platform" }
+rcm-ipc = { path = "crates/rcm-ipc" }
+rcm-ui-kit = { path = "crates/rcm-ui-kit" }
+
+# Serialization & Core
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+thiserror = "2.0"
+camino = { version = "1.1", features = ["serde1"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Async & Networking (Loopback RC & Local IPC)
+tokio = { version = "1.40", default-features = false }
+bytes = "1.7"
+http = "1.1"
+http-body-util = "0.1"
+hyper = { version = "1.4", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "tokio", "http1"] }
+
+# System & IPC
+interprocess = { version = "2.2", features = ["tokio"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+notify = "6.1"
+zeroize = { version = "1.8", features = ["derive", "zeroize_derive"] }
+directories = "5.0"
+open = "5.3"
+
+# Profile optimizations per SRDD §7.15
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

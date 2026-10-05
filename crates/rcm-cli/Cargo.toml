@@ -1,0 +1,16 @@
+[package]
+name = "rcm-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rcmctl"
+path = "src/main.rs"
+
+[dependencies]
+rcm-core = { workspace = true }
+rcm-ipc = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true, features = ["rt", "net", "time", "sync", "io-util", "macros"] }

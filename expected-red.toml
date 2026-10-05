@@ -1,0 +1,4 @@
+# expected-red.toml
+# Declared failing tests during active feature development.
+# Format: "test_name" = "REQUIREMENT-ID"
+# Main must always be clean (empty).

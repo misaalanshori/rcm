@@ -1,0 +1,17 @@
+[package]
+name = "rcm-platform"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+rcm-core = { workspace = true }
+camino = { workspace = true }
+thiserror = { workspace = true }
+directories = { workspace = true }
+open = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+# Windows specific dependencies if needed

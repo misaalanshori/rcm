@@ -1,0 +1,18 @@
+[package]
+name = "rcm-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rcm"
+path = "src/main.rs"
+
+[dependencies]
+rcm-core = { workspace = true }
+rcm-rc = { workspace = true }
+rcm-ipc = { workspace = true }
+rcm-ui-kit = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "macros"] }
+tracing = { workspace = true }

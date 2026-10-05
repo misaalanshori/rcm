@@ -1,0 +1,18 @@
+[package]
+name = "rcm-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+rcm-core = { workspace = true }
+rcm-rc = { workspace = true }
+rcm-config = { workspace = true }
+rcm-supervisor = { workspace = true }
+rcm-platform = { workspace = true }
+rcm-ipc = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true, features = ["rt", "net", "time", "process", "sync", "io-util", "macros"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
