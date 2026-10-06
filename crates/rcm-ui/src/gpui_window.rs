@@ -37,6 +37,12 @@ pub enum ActiveModal {
         drive_letter: char,
         preset: MountPreset,
     },
+    NewServeModal {
+        name: String,
+        selected_remote: String,
+        protocol: rcm_core::ServeProtocol,
+        addr: String,
+    },
 }
 
 pub struct RcmDesktopWindow {
@@ -51,6 +57,7 @@ pub struct RcmDesktopWindow {
     available_providers: Vec<ProviderInfo>,
     explorer_remote: Option<String>,
     explorer_files: Vec<FileEntryViewModel>,
+    snapshots: Vec<rcm_core::SnapshotMeta>,
 }
 
 impl RcmDesktopWindow {
@@ -67,6 +74,7 @@ impl RcmDesktopWindow {
             available_providers: Vec::new(),
             explorer_remote: None,
             explorer_files: Vec::new(),
+            snapshots: Vec::new(),
         }
     }
 
@@ -85,12 +93,14 @@ impl RcmDesktopWindow {
         cx.spawn(async move |this, cx| {
             let (daemon_state, remotes, mounts, serves) = app.fetch_ui_data().await;
             let providers = app.fetch_providers().await.unwrap_or_default();
+            let snaps = app.fetch_snapshots().await.unwrap_or_default();
 
             let _ = this.update(cx, |this, cx| {
                 this.daemon_state = daemon_state;
                 this.remotes = remotes;
                 this.mounts = mounts;
                 this.serves = serves;
+                this.snapshots = snaps;
                 if !providers.is_empty() {
                     this.available_providers = providers;
                 }
@@ -232,6 +242,71 @@ impl RcmDesktopWindow {
         .detach();
     }
 
+    pub fn open_new_serve_modal(&mut self, cx: &mut Context<Self>) {
+        let default_remote = self.remotes.first().map(|r| r.name.clone()).unwrap_or_else(|| "remote".to_string());
+        self.active_modal = ActiveModal::NewServeModal {
+            name: format!("{}_webdav", default_remote),
+            selected_remote: default_remote,
+            protocol: rcm_core::ServeProtocol::Webdav,
+            addr: "127.0.0.1:8080".to_string(),
+        };
+        cx.notify();
+    }
+
+    pub fn stop_serve_action(&mut self, id: u64, cx: &mut Context<Self>) {
+        let app = self.app.clone();
+        self.status_text = format!("Stopping serve #{}...", id);
+        cx.notify();
+
+        cx.spawn(async move |this, cx| {
+            let res = app.stop_serve(id).await;
+            let _ = this.update(cx, |this, cx| {
+                match res {
+                    Ok(_) => this.status_text = format!("Stopped serve #{}", id),
+                    Err(e) => this.status_text = format!("Stop serve failed: {}", e),
+                }
+                this.refresh_state(cx);
+            });
+        })
+        .detach();
+    }
+
+    pub fn restore_snapshot_action(&mut self, filename: String, cx: &mut Context<Self>) {
+        let app = self.app.clone();
+        self.status_text = format!("Restoring snapshot '{}'...", filename);
+        cx.notify();
+
+        cx.spawn(async move |this, cx| {
+            let res = app.restore_snapshot(&filename).await;
+            let _ = this.update(cx, |this, cx| {
+                match res {
+                    Ok(_) => this.status_text = format!("Restored snapshot '{}'", filename),
+                    Err(e) => this.status_text = format!("Restore failed: {}", e),
+                }
+                this.refresh_state(cx);
+            });
+        })
+        .detach();
+    }
+
+    pub fn update_rclone_action(&mut self, cx: &mut Context<Self>) {
+        let app = self.app.clone();
+        self.status_text = "Downloading latest official verified rclone...".to_string();
+        cx.notify();
+
+        cx.spawn(async move |this, cx| {
+            let res = app.update_rclone().await;
+            let _ = this.update(cx, |this, cx| {
+                match res {
+                    Ok(ver) => this.status_text = format!("Updated rclone to {}", ver),
+                    Err(e) => this.status_text = format!("Update failed: {}", e),
+                }
+                this.refresh_state(cx);
+            });
+        })
+        .detach();
+    }
+
     // Modal dialog triggers
     pub fn open_new_mount_modal(&mut self, cx: &mut Context<Self>) {
         let default_remote = self.remotes.first().map(|r| r.name.clone()).unwrap_or_else(|| "remote".to_string());
@@ -325,6 +400,9 @@ impl Render for RcmDesktopWindow {
                 ActiveModal::None => None,
                 ActiveModal::NewMountModal { name, selected_remote, drive_letter, preset } => {
                     Some(self.render_new_mount_modal(name, selected_remote, *drive_letter, *preset, cx).into_any_element())
+                }
+                ActiveModal::NewServeModal { name, selected_remote, protocol, addr } => {
+                    Some(self.render_new_serve_modal(name, selected_remote, protocol.clone(), addr, cx).into_any_element())
                 }
                 ActiveModal::NewRemoteWizard { step, name, selected_backend, filter: _, question_text, question_help, answer_input: _, is_password: _, oauth_url, error } => {
                     let data = WizardModalData {
@@ -780,7 +858,7 @@ impl RcmDesktopWindow {
             )
     }
 
-    fn render_serves_view(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_serves_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
@@ -788,10 +866,24 @@ impl RcmDesktopWindow {
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(div().text_size(px(22.0)).font_weight(FontWeight::BOLD).child("Network Serves"))
-                    .child(div().text_size(px(13.0)).text_color(rgb(0xa6adc8)).child("Expose cloud storage via WebDAV, SFTP, HTTP, or S3 gateway.")),
+                    .flex_row()
+                    .justify_between()
+                    .items_center()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(div().text_size(px(22.0)).font_weight(FontWeight::BOLD).child("Network Serves"))
+                            .child(div().text_size(px(13.0)).text_color(rgb(0xa6adc8)).child("Expose cloud storage via WebDAV, SFTP, HTTP, or S3 gateway.")),
+                    )
+                    .child(
+                        Button::new("add_serve_btn")
+                            .label("+ New Serve Profile")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.open_new_serve_modal(cx);
+                            })),
+                    ),
             )
             .child(
                 if self.serves.is_empty() {
@@ -800,7 +892,7 @@ impl RcmDesktopWindow {
                         .rounded_lg()
                         .bg(rgb(0x1e1e2e))
                         .text_color(rgb(0xa6adc8))
-                        .child("No active network serves configured.")
+                        .child("No active network serves configured. Click '+ New Serve Profile' to share cloud files over LAN.")
                 } else {
                     div()
                         .flex()
@@ -821,9 +913,11 @@ impl RcmDesktopWindow {
                                     div()
                                         .flex()
                                         .flex_row()
+                                        .items_center()
                                         .gap_3()
                                         .child(Badge::new().child(s.protocol.clone()))
-                                        .child(div().child(format!("{} on {}", s.name, s.addr))),
+                                        .child(div().font_weight(FontWeight::MEDIUM).child(format!("{} on {}", s.name, s.addr)))
+                                        .child(div().text_color(rgb(0x89b4fa)).text_size(px(12.0)).child(s.url.clone())),
                                 )
                         }))
                 },
@@ -979,7 +1073,68 @@ impl RcmDesktopWindow {
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.trigger_reconcile(cx);
                                     })),
+                            )
+                            .child(
+                                Button::new("update_rclone_btn")
+                                    .label("⬇ Update rclone Binary")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.update_rclone_action(cx);
+                                    })),
                             ),
+                    ),
+            )
+            // Snapshots & Backups List
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .p_4()
+                    .rounded_lg()
+                    .bg(rgb(0x1e1e2e))
+                    .border_1()
+                    .border_color(rgb(0x313244))
+                    .child(div().text_size(px(15.0)).font_weight(FontWeight::SEMIBOLD).child("Configuration Snapshots (Automatic Rollback)"))
+                    .child(
+                        if self.snapshots.is_empty() {
+                            div().text_size(px(12.0)).text_color(rgb(0xa6adc8)).child("No previous snapshots stored yet.")
+                        } else {
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_2()
+                                .max_h(px(240.0))
+                                .overflow_hidden()
+                                .children(self.snapshots.iter().rev().take(10).map(|snap| {
+                                    let filename = snap.filename.clone();
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .justify_between()
+                                        .p_2()
+                                        .rounded_md()
+                                        .bg(rgb(0x181825))
+                                        .border_1()
+                                        .border_color(rgb(0x313244))
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .flex_row()
+                                                .items_center()
+                                                .gap_3()
+                                                .child(Badge::new().child(format!("{:?}", snap.reason)))
+                                                .child(div().text_size(px(12.0)).child(format!("{} ({} bytes)", snap.filename, snap.file_size_bytes))),
+                                        )
+                                        .child(
+                                            Button::new(format!("rst_{}", snap.filename))
+                                                .label("↻ Restore")
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    this.restore_snapshot_action(filename.clone(), cx);
+                                                })),
+                                        )
+                                }))
+                        },
                     ),
             )
     }
@@ -1138,6 +1293,186 @@ impl RcmDesktopWindow {
 
                                         cx.spawn(async move |this, cx| {
                                             let _ = app.save_mount_profile(profile).await;
+                                            let _ = this.update(cx, |this, cx| {
+                                                this.close_modal(cx);
+                                                this.refresh_state(cx);
+                                            });
+                                        })
+                                        .detach();
+                                    })),
+                            ),
+                    ),
+            )
+    }
+
+    // Modal: New Serve Profile Dialog (FR-SV-01, FR-SV-03, FR-SV-05)
+    fn render_new_serve_modal(
+        &self,
+        name: &str,
+        selected_remote: &str,
+        protocol: rcm_core::ServeProtocol,
+        addr: &str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let cur_remote = selected_remote.to_string();
+        let cur_name = name.to_string();
+        let cur_addr = addr.to_string();
+        let cur_proto = protocol.clone();
+        let remotes_list = self.remotes.clone();
+
+        div()
+            .absolute()
+            .size_full()
+            .top_0()
+            .left_0()
+            .bg(rgba(0x000000cc))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .w(px(560.0))
+                    .p_6()
+                    .rounded_xl()
+                    .bg(rgb(0x1e1e2e))
+                    .border_1()
+                    .border_color(rgb(0x45475a))
+                    .gap_4()
+                    .child(div().text_size(px(18.0)).font_weight(FontWeight::BOLD).child("Create New Serve Endpoint"))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child("Select Cloud Remote:"))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .gap_2()
+                                    .children(remotes_list.iter().map(|r| {
+                                        let r_name = r.name.clone();
+                                        let is_sel = r_name == cur_remote;
+                                        Button::new(format!("pick_srv_rem_{}", r_name))
+                                            .label(if is_sel { format!("● {}", r_name) } else { r_name.clone() })
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                if let ActiveModal::NewServeModal { selected_remote, .. } = &mut this.active_modal {
+                                                    *selected_remote = r_name.clone();
+                                                }
+                                                cx.notify();
+                                            }))
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child(format!("Protocol (Current: {}):", protocol)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .gap_2()
+                                    .child(
+                                        Button::new("proto_webdav")
+                                            .label("WebDAV")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                if let ActiveModal::NewServeModal { protocol, .. } = &mut this.active_modal {
+                                                    *protocol = rcm_core::ServeProtocol::Webdav;
+                                                }
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("proto_sftp")
+                                            .label("SFTP")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                if let ActiveModal::NewServeModal { protocol, .. } = &mut this.active_modal {
+                                                    *protocol = rcm_core::ServeProtocol::Sftp;
+                                                }
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("proto_http")
+                                            .label("HTTP")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                if let ActiveModal::NewServeModal { protocol, .. } = &mut this.active_modal {
+                                                    *protocol = rcm_core::ServeProtocol::Http;
+                                                }
+                                                cx.notify();
+                                            })),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child(format!("Bind Address (Current: {}):", addr)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .gap_2()
+                                    .child(
+                                        Button::new("addr_loopback")
+                                            .label("Local Only (127.0.0.1:8080)")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                if let ActiveModal::NewServeModal { addr, .. } = &mut this.active_modal {
+                                                    *addr = "127.0.0.1:8080".to_string();
+                                                }
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("addr_lan")
+                                            .label("Home LAN (0.0.0.0:8080)")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                if let ActiveModal::NewServeModal { addr, .. } = &mut this.active_modal {
+                                                    *addr = "0.0.0.0:8080".to_string();
+                                                }
+                                                cx.notify();
+                                            })),
+                                    ),
+                            ),
+                    )
+                    // Footer
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .justify_between()
+                            .items_center()
+                            .pt_4()
+                            .border_t_1()
+                            .border_color(rgb(0x313244))
+                            .child(
+                                Button::new("cancel_serve_modal")
+                                    .label("Cancel")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.close_modal(cx);
+                                    })),
+                            )
+                            .child(
+                                Button::new("confirm_start_serve")
+                                    .label("Start Serve Endpoint")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        let app = this.app.clone();
+                                        let profile = rcm_core::ServeProfile::new(
+                                            cur_name.clone(),
+                                            cur_remote.clone(),
+                                            cur_proto.clone(),
+                                            cur_addr.clone(),
+                                        );
+
+                                        cx.spawn(async move |this, cx| {
+                                            let _ = app.start_serve(profile).await;
                                             let _ = this.update(cx, |this, cx| {
                                                 this.close_modal(cx);
                                                 this.refresh_state(cx);

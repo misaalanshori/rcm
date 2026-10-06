@@ -632,6 +632,101 @@ impl AppController {
             .await
             .map_err(|e| rcm_core::CoreError::Connection(format!("List files failed: {}", e)))?
     }
+
+    pub async fn start_serve(
+        &self,
+        profile: rcm_core::ServeProfile,
+    ) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref ipc) = s.ipc_client {
+                    let val = serde_json::to_value(&profile).map_err(|e| {
+                        rcm_core::CoreError::Serialization(e.to_string())
+                    })?;
+                    ipc.call("profiles.save_serve", val).await?;
+                }
+                if let Some(ref rc) = s.rc_client {
+                    rc.serve_start(
+                        &profile.protocol.to_string(),
+                        &profile.remote,
+                        &profile.addr,
+                        profile.user.as_deref(),
+                        profile.pass.as_deref(),
+                        profile.vfs_options.clone(),
+                    )
+                    .await
+                    .map_err(|e| rcm_core::CoreError::Validation(e.to_string()))?;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Start serve failed: {}", e)))?
+    }
+
+    pub async fn stop_serve(&self, id: u64) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref rc) = s.rc_client {
+                    rc.serve_stop(id)
+                        .await
+                        .map_err(|e| rcm_core::CoreError::Validation(e.to_string()))?;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Stop serve failed: {}", e)))?
+    }
+
+    pub async fn fetch_snapshots(&self) -> Result<Vec<rcm_core::SnapshotMeta>, rcm_core::CoreError> {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref ipc) = s.ipc_client {
+                    let res = ipc.call("backups.list", serde_json::json!({})).await?;
+                    let list: Vec<rcm_core::SnapshotMeta> = serde_json::from_value(res).unwrap_or_default();
+                    return Ok(list);
+                }
+                Ok(Vec::new())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Fetch snapshots failed: {}", e)))?
+    }
+
+    pub async fn restore_snapshot(&self, filename: &str) -> Result<(), rcm_core::CoreError> {
+        let app = self.clone();
+        let fname = filename.to_string();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref ipc) = s.ipc_client {
+                    ipc.call("backups.restore", serde_json::Value::String(fname)).await?;
+                }
+                Ok::<(), rcm_core::CoreError>(())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Restore snapshot failed: {}", e)))?
+    }
+
+    pub async fn update_rclone(&self) -> Result<String, rcm_core::CoreError> {
+        let app = self.clone();
+        self.tokio_handle
+            .spawn(async move {
+                let s = app.state.read().await;
+                if let Some(ref ipc) = s.ipc_client {
+                    let res = ipc.call("binary.fetch", serde_json::Value::Null).await?;
+                    let ver = res.get("version").and_then(|v| v.as_str()).unwrap_or("latest").to_string();
+                    return Ok(ver);
+                }
+                Ok("unknown".to_string())
+            })
+            .await
+            .map_err(|e| rcm_core::CoreError::Connection(format!("Update rclone failed: {}", e)))?
+    }
 }
 
 fn find_agent_binary() -> Option<String> {
