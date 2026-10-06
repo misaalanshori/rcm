@@ -30,9 +30,9 @@ fn main() {
 
         let app_clone = app.clone();
 
-        match gpui_kit::open_window(window_options, cx, move |_window, cx| {
+        match gpui_kit::open_window(window_options, cx, move |window, cx| {
             cx.new(|cx| {
-                let mut win = RcmDesktopWindow::new(app_clone);
+                let mut win = RcmDesktopWindow::new(window, app_clone, cx);
                 win.refresh_state(cx);
                 win
             })

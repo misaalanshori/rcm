@@ -1,5 +1,6 @@
 use gpui_kit::component::badge::Badge;
 use gpui_kit::component::button::Button;
+use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::*;
 use rcm_core::{DaemonState, Id, MountPreset, MountProfile, MountTarget};
 use rcm_rc::types::ProviderInfo;
@@ -12,6 +13,7 @@ pub struct WizardModalData<'a> {
     pub selected_backend: &'a str,
     pub question_text: &'a str,
     pub question_help: &'a str,
+    pub is_password: bool,
     pub oauth_url: Option<&'a str>,
     pub error: Option<&'a str>,
 }
@@ -23,10 +25,8 @@ pub enum ActiveModal {
         step: usize,
         name: String,
         selected_backend: String,
-        filter: String,
         question_text: String,
         question_help: String,
-        answer_input: String,
         is_password: bool,
         oauth_url: Option<String>,
         error: Option<String>,
@@ -56,12 +56,35 @@ pub struct RcmDesktopWindow {
     active_modal: ActiveModal,
     available_providers: Vec<ProviderInfo>,
     explorer_remote: Option<String>,
+    explorer_path: String,
     explorer_files: Vec<FileEntryViewModel>,
     snapshots: Vec<rcm_core::SnapshotMeta>,
+
+    // Real GPUI Interactive Input Entities
+    wizard_name_input: Entity<InputState>,
+    wizard_search_input: Entity<InputState>,
+    wizard_answer_input: Entity<InputState>,
+    mount_name_input: Entity<InputState>,
+    mount_subpath_input: Entity<InputState>,
+    serve_name_input: Entity<InputState>,
+    serve_addr_input: Entity<InputState>,
+    serve_user_input: Entity<InputState>,
+    serve_pass_input: Entity<InputState>,
+    wizard_driver: Option<rcm_rc::WizardDriver>,
 }
 
 impl RcmDesktopWindow {
-    pub fn new(app: AppController) -> Self {
+    pub fn new(window: &mut Window, app: AppController, cx: &mut Context<Self>) -> Self {
+        let wizard_name_input = cx.new(|cx| InputState::new(window, cx).placeholder("e.g. my_gdrive"));
+        let wizard_search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search providers (e.g. drive, s3, dropbox)..."));
+        let wizard_answer_input = cx.new(|cx| InputState::new(window, cx).placeholder("Enter configuration value..."));
+        let mount_name_input = cx.new(|cx| InputState::new(window, cx).placeholder("Profile name (e.g. Work Drive)"));
+        let mount_subpath_input = cx.new(|cx| InputState::new(window, cx).placeholder("Subpath within remote (optional)"));
+        let serve_name_input = cx.new(|cx| InputState::new(window, cx).placeholder("Endpoint name (e.g. HomeWebDAV)"));
+        let serve_addr_input = cx.new(|cx| InputState::new(window, cx).placeholder("127.0.0.1:8080"));
+        let serve_user_input = cx.new(|cx| InputState::new(window, cx).placeholder("Username (required for LAN)"));
+        let serve_pass_input = cx.new(|cx| InputState::new(window, cx).placeholder("Password (required for LAN)"));
+
         Self {
             app,
             current_destination: SidebarDestination::Home,
@@ -73,8 +96,20 @@ impl RcmDesktopWindow {
             active_modal: ActiveModal::None,
             available_providers: Vec::new(),
             explorer_remote: None,
+            explorer_path: String::new(),
             explorer_files: Vec::new(),
             snapshots: Vec::new(),
+
+            wizard_name_input,
+            wizard_search_input,
+            wizard_answer_input,
+            mount_name_input,
+            mount_subpath_input,
+            serve_name_input,
+            serve_addr_input,
+            serve_user_input,
+            serve_pass_input,
+            wizard_driver: None,
         }
     }
 
@@ -85,6 +120,7 @@ impl RcmDesktopWindow {
 
     pub fn close_modal(&mut self, cx: &mut Context<Self>) {
         self.active_modal = ActiveModal::None;
+        self.wizard_driver = None;
         cx.notify();
     }
 
@@ -221,6 +257,7 @@ impl RcmDesktopWindow {
 
     pub fn browse_remote(&mut self, remote: String, cx: &mut Context<Self>) {
         self.explorer_remote = Some(remote.clone());
+        self.explorer_path = String::new();
         self.current_destination = SidebarDestination::Files;
         self.status_text = format!("Loading directory listing for {}:...", remote);
         cx.notify();
@@ -235,6 +272,57 @@ impl RcmDesktopWindow {
                     this.status_text = format!("Loaded {} files from {}", this.explorer_files.len(), remote);
                 } else {
                     this.status_text = format!("Failed to list files for {}", remote);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn navigate_folder(&mut self, subpath: String, cx: &mut Context<Self>) {
+        let rem = match &self.explorer_remote {
+            Some(r) => r.clone(),
+            None => return,
+        };
+
+        self.explorer_path = subpath.clone();
+        self.status_text = format!("Entering {}...", subpath);
+        cx.notify();
+
+        let app = self.app.clone();
+        cx.spawn(async move |this, cx| {
+            let res = app.list_files(&format!("{}:", rem), &subpath).await;
+            let _ = this.update(cx, |this, cx| {
+                if let Ok(files) = res {
+                    this.explorer_files = files;
+                    this.status_text = format!("Loaded {} items in {}", this.explorer_files.len(), subpath);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn navigate_up(&mut self, cx: &mut Context<Self>) {
+        let rem = match &self.explorer_remote {
+            Some(r) => r.clone(),
+            None => return,
+        };
+
+        let parent_path = if let Some(pos) = self.explorer_path.rfind('/') {
+            self.explorer_path[..pos].to_string()
+        } else {
+            String::new()
+        };
+
+        self.explorer_path = parent_path.clone();
+        let app = self.app.clone();
+        cx.spawn(async move |this, cx| {
+            let res = app.list_files(&format!("{}:", rem), &parent_path).await;
+            let _ = this.update(cx, |this, cx| {
+                if let Ok(files) = res {
+                    this.explorer_files = files;
+                    this.status_text = "Navigated up.".to_string();
                 }
                 cx.notify();
             });
@@ -324,15 +412,61 @@ impl RcmDesktopWindow {
             step: 0,
             name: "my_remote".to_string(),
             selected_backend: "drive".to_string(),
-            filter: String::new(),
             question_text: String::new(),
             question_help: String::new(),
-            answer_input: String::new(),
             is_password: false,
             oauth_url: None,
             error: None,
         };
+        self.wizard_driver = None;
         cx.notify();
+    }
+
+    pub fn submit_wizard_answer(&mut self, answer: String, cx: &mut Context<Self>) {
+        if let Some(ref mut driver) = self.wizard_driver {
+            let is_pass = match &self.active_modal {
+                ActiveModal::NewRemoteWizard { is_password, .. } => *is_password,
+                _ => false,
+            };
+
+            let mut driver_clone = driver.clone();
+
+            cx.spawn(async move |this, cx| {
+                let res = driver_clone.answer(&answer, is_pass).await;
+                let _ = this.update(cx, |this, cx| {
+                    this.wizard_driver = Some(driver_clone);
+                    match res {
+                        Ok(rcm_rc::WizardStep::AskQuestion { state, option, error }) => {
+                            if let ActiveModal::NewRemoteWizard { question_text, question_help, is_password, error: err_slot, .. } = &mut this.active_modal {
+                                *question_text = state;
+                                *question_help = option.help;
+                                *is_password = option.is_password;
+                                *err_slot = error;
+                            }
+                        }
+                        Ok(rcm_rc::WizardStep::OAuthInProgress { auth_url }) => {
+                            if let ActiveModal::NewRemoteWizard { question_text, question_help, oauth_url, .. } = &mut this.active_modal {
+                                *question_text = "OAuth Authorization".to_string();
+                                *question_help = "Please authorize in your web browser.".to_string();
+                                *oauth_url = auth_url;
+                            }
+                        }
+                        Ok(rcm_rc::WizardStep::Completed { .. }) => {
+                            this.close_modal(cx);
+                            this.refresh_state(cx);
+                        }
+                        Err(e) => {
+                            if let ActiveModal::NewRemoteWizard { error, .. } = &mut this.active_modal {
+                                *error = Some(e.to_string());
+                            }
+                        }
+                        _ => {}
+                    }
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
     }
 }
 
@@ -404,13 +538,14 @@ impl Render for RcmDesktopWindow {
                 ActiveModal::NewServeModal { name, selected_remote, protocol, addr } => {
                     Some(self.render_new_serve_modal(name, selected_remote, protocol.clone(), addr, cx).into_any_element())
                 }
-                ActiveModal::NewRemoteWizard { step, name, selected_backend, filter: _, question_text, question_help, answer_input: _, is_password: _, oauth_url, error } => {
+                ActiveModal::NewRemoteWizard { step, name, selected_backend, question_text, question_help, is_password, oauth_url, error } => {
                     let data = WizardModalData {
                         step: *step,
                         name,
                         selected_backend,
                         question_text,
                         question_help,
+                        is_password: *is_password,
                         oauth_url: oauth_url.as_deref(),
                         error: error.as_deref(),
                     };
@@ -926,6 +1061,7 @@ impl RcmDesktopWindow {
 
     fn render_files_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let current_rem = self.explorer_remote.clone();
+        let current_path = self.explorer_path.clone();
 
         div()
             .flex()
@@ -948,11 +1084,22 @@ impl RcmDesktopWindow {
                                     .text_size(px(13.0))
                                     .text_color(rgb(0xa6adc8))
                                     .child(match &current_rem {
-                                        Some(r) => format!("Browsing files on {}:", r),
+                                        Some(r) => format!("Browsing {}:{}/", r, current_path),
                                         None => "Select a remote below to explore files.".to_string(),
                                     }),
                             ),
-                    ),
+                    )
+                    .children(if !current_path.is_empty() {
+                        Some(
+                            Button::new("up_folder_btn")
+                                .label("⬆ Up to Parent")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.navigate_up(cx);
+                                })),
+                        )
+                    } else {
+                        None
+                    }),
             )
             // Remote Selector Row
             .child(
@@ -992,6 +1139,8 @@ impl RcmDesktopWindow {
                         .overflow_hidden()
                         .children(self.explorer_files.iter().map(|f| {
                             let icon = if f.is_dir { "📁" } else { "📄" };
+                            let path = f.path.clone();
+                            let is_dir = f.is_dir;
                             let size_display = if f.is_dir {
                                 "DIR".to_string()
                             } else {
@@ -1016,7 +1165,18 @@ impl RcmDesktopWindow {
                                         .items_center()
                                         .gap_3()
                                         .child(div().child(icon))
-                                        .child(div().font_weight(FontWeight::MEDIUM).child(f.name.clone())),
+                                        .child(
+                                            if is_dir {
+                                                Button::new(format!("dir_{}", f.name))
+                                                    .label(format!("{} ↗", f.name))
+                                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                                        this.navigate_folder(path.clone(), cx);
+                                                    }))
+                                                    .into_any_element()
+                                            } else {
+                                                div().font_weight(FontWeight::MEDIUM).child(f.name.clone()).into_any_element()
+                                            },
+                                        ),
                                 )
                                 .child(
                                     div()
@@ -1142,7 +1302,7 @@ impl RcmDesktopWindow {
     // Modal: New Mount Profile Dialog
     fn render_new_mount_modal(
         &self,
-        name: &str,
+        _name: &str,
         selected_remote: &str,
         drive_letter: char,
         preset: MountPreset,
@@ -1158,7 +1318,6 @@ impl RcmDesktopWindow {
 
         let remotes_list = self.remotes.clone();
         let cur_remote = selected_remote.to_string();
-        let cur_name = name.to_string();
 
         div()
             .absolute()
@@ -1173,7 +1332,7 @@ impl RcmDesktopWindow {
                 div()
                     .flex()
                     .flex_col()
-                    .w(px(560.0))
+                    .w(px(580.0))
                     .p_6()
                     .rounded_xl()
                     .bg(rgb(0x1e1e2e))
@@ -1181,6 +1340,16 @@ impl RcmDesktopWindow {
                     .border_color(rgb(0x45475a))
                     .gap_4()
                     .child(div().text_size(px(18.0)).font_weight(FontWeight::BOLD).child("Create New Mount Profile"))
+                    // Mount Profile Name Input
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child("Profile Name:"))
+                            .child(Input::new(&self.mount_name_input)),
+                    )
+                    // Select Cloud Remote
                     .child(
                         div()
                             .flex()
@@ -1206,6 +1375,16 @@ impl RcmDesktopWindow {
                                     })),
                             ),
                     )
+                    // Mount Subpath Input
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child("Subpath in Remote (optional):"))
+                            .child(Input::new(&self.mount_subpath_input)),
+                    )
+                    // Target Drive Letter
                     .child(
                         div()
                             .flex()
@@ -1230,6 +1409,7 @@ impl RcmDesktopWindow {
                                     })),
                             ),
                     )
+                    // Mount Preset Buttons
                     .child(
                         div()
                             .flex()
@@ -1285,9 +1465,24 @@ impl RcmDesktopWindow {
                                     .label(format!("Save & Mount as {}:", drive_letter))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         let app = this.app.clone();
+                                        let typed_name = this.mount_name_input.read(cx).value().to_string();
+                                        let typed_subpath = this.mount_subpath_input.read(cx).value().to_string();
+
+                                        let full_remote = if typed_subpath.is_empty() {
+                                            cur_remote.clone()
+                                        } else {
+                                            format!("{}:{}", cur_remote, typed_subpath.trim_start_matches('/'))
+                                        };
+
+                                        let final_name = if typed_name.is_empty() {
+                                            format!("{} ({}:)", cur_remote, drive_letter)
+                                        } else {
+                                            typed_name
+                                        };
+
                                         let profile = MountProfile::new(
-                                            cur_name.clone(),
-                                            cur_remote.clone(),
+                                            final_name,
+                                            full_remote,
                                             MountTarget::DriveLetter(drive_letter),
                                         );
 
@@ -1308,15 +1503,13 @@ impl RcmDesktopWindow {
     // Modal: New Serve Profile Dialog (FR-SV-01, FR-SV-03, FR-SV-05)
     fn render_new_serve_modal(
         &self,
-        name: &str,
+        _name: &str,
         selected_remote: &str,
         protocol: rcm_core::ServeProtocol,
-        addr: &str,
+        _addr: &str,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let cur_remote = selected_remote.to_string();
-        let cur_name = name.to_string();
-        let cur_addr = addr.to_string();
         let cur_proto = protocol.clone();
         let remotes_list = self.remotes.clone();
 
@@ -1333,7 +1526,7 @@ impl RcmDesktopWindow {
                 div()
                     .flex()
                     .flex_col()
-                    .w(px(560.0))
+                    .w(px(580.0))
                     .p_6()
                     .rounded_xl()
                     .bg(rgb(0x1e1e2e))
@@ -1341,6 +1534,14 @@ impl RcmDesktopWindow {
                     .border_color(rgb(0x45475a))
                     .gap_4()
                     .child(div().text_size(px(18.0)).font_weight(FontWeight::BOLD).child("Create New Serve Endpoint"))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child("Endpoint Name:"))
+                            .child(Input::new(&self.serve_name_input)),
+                    )
                     .child(
                         div()
                             .flex()
@@ -1413,33 +1614,32 @@ impl RcmDesktopWindow {
                         div()
                             .flex()
                             .flex_col()
-                            .gap_2()
-                            .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child(format!("Bind Address (Current: {}):", addr)))
+                            .gap_1()
+                            .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child("Bind Address & Port:"))
+                            .child(Input::new(&self.serve_addr_input)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap_3()
                             .child(
                                 div()
                                     .flex()
-                                    .flex_row()
-                                    .gap_2()
-                                    .child(
-                                        Button::new("addr_loopback")
-                                            .label("Local Only (127.0.0.1:8080)")
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                if let ActiveModal::NewServeModal { addr, .. } = &mut this.active_modal {
-                                                    *addr = "127.0.0.1:8080".to_string();
-                                                }
-                                                cx.notify();
-                                            })),
-                                    )
-                                    .child(
-                                        Button::new("addr_lan")
-                                            .label("Home LAN (0.0.0.0:8080)")
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                if let ActiveModal::NewServeModal { addr, .. } = &mut this.active_modal {
-                                                    *addr = "0.0.0.0:8080".to_string();
-                                                }
-                                                cx.notify();
-                                            })),
-                                    ),
+                                    .flex_col()
+                                    .flex_grow(1.0)
+                                    .gap_1()
+                                    .child(div().text_size(px(12.0)).text_color(rgb(0xa6adc8)).child("Username (for LAN):"))
+                                    .child(Input::new(&self.serve_user_input)),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .flex_grow(1.0)
+                                    .gap_1()
+                                    .child(div().text_size(px(12.0)).text_color(rgb(0xa6adc8)).child("Password (for LAN):"))
+                                    .child(Input::new(&self.serve_pass_input).mask_toggle()),
                             ),
                     )
                     // Footer
@@ -1464,12 +1664,24 @@ impl RcmDesktopWindow {
                                     .label("Start Serve Endpoint")
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         let app = this.app.clone();
-                                        let profile = rcm_core::ServeProfile::new(
-                                            cur_name.clone(),
+                                        let typed_name = this.serve_name_input.read(cx).value().to_string();
+                                        let typed_addr = this.serve_addr_input.read(cx).value().to_string();
+                                        let typed_user = this.serve_user_input.read(cx).value().to_string();
+                                        let typed_pass = this.serve_pass_input.read(cx).value().to_string();
+
+                                        let mut profile = rcm_core::ServeProfile::new(
+                                            if typed_name.is_empty() { format!("{}_serve", cur_remote) } else { typed_name },
                                             cur_remote.clone(),
                                             cur_proto.clone(),
-                                            cur_addr.clone(),
+                                            if typed_addr.is_empty() { "127.0.0.1:8080".to_string() } else { typed_addr },
                                         );
+
+                                        if !typed_user.is_empty() {
+                                            profile.user = Some(typed_user);
+                                        }
+                                        if !typed_pass.is_empty() {
+                                            profile.pass = Some(typed_pass);
+                                        }
 
                                         cx.spawn(async move |this, cx| {
                                             let _ = app.start_serve(profile).await;
@@ -1492,10 +1704,10 @@ impl RcmDesktopWindow {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let step = data.step;
-        let cur_name = data.name.to_string();
         let cur_backend = data.selected_backend.to_string();
         let q_title = if data.question_text.is_empty() { "Authentication & Options".to_string() } else { data.question_text.to_string() };
         let q_help = if data.question_help.is_empty() { "Complete setup for this cloud backend.".to_string() } else { data.question_help.to_string() };
+        let is_password = data.is_password;
 
         let popular_backends = [
             ("drive", "Google Drive", "Cloud storage by Google"),
@@ -1506,6 +1718,8 @@ impl RcmDesktopWindow {
             ("sftp", "SFTP", "SSH file transfer"),
             ("crypt", "Encrypt (Crypt)", "Client-side encryption wrapper"),
         ];
+
+        let search_query = self.wizard_search_input.read(cx).value().to_string().to_lowercase();
 
         div()
             .absolute()
@@ -1520,8 +1734,8 @@ impl RcmDesktopWindow {
                 div()
                     .flex()
                     .flex_col()
-                    .w(px(640.0))
-                    .max_h(px(560.0))
+                    .w(px(660.0))
+                    .max_h(px(580.0))
                     .p_6()
                     .rounded_xl()
                     .bg(rgb(0x1e1e2e))
@@ -1544,81 +1758,69 @@ impl RcmDesktopWindow {
                             .flex()
                             .flex_col()
                             .gap_3()
+                            // Real Remote Name Text Input!
                             .child(
                                 div()
                                     .flex()
                                     .flex_col()
                                     .gap_1()
                                     .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child("Remote Name:"))
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .flex_row()
-                                            .gap_2()
-                                            .children([
-                                                ("my_gdrive", "my_gdrive"),
-                                                ("my_s3", "my_s3"),
-                                                ("my_dropbox", "my_dropbox"),
-                                                ("my_backup", "my_backup"),
-                                            ].into_iter().map(|(lbl, val)| {
-                                                let is_sel = cur_name == val;
-                                                Button::new(format!("name_{}", val))
-                                                    .label(if is_sel { format!("● {}", lbl) } else { lbl.to_string() })
-                                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                                        if let ActiveModal::NewRemoteWizard { name, .. } = &mut this.active_modal {
-                                                            *name = val.to_string();
-                                                        }
-                                                        cx.notify();
-                                                    }))
-                                            })),
-                                    ),
+                                    .child(Input::new(&self.wizard_name_input)),
+                            )
+                            // Real Search Filter Input!
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_1()
+                                    .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child("Search Cloud Providers:"))
+                                    .child(Input::new(&self.wizard_search_input)),
                             )
                             .child(
                                 div()
                                     .flex()
                                     .flex_col()
-                                    .gap_2()
-                                    .child(div().text_size(px(13.0)).font_weight(FontWeight::SEMIBOLD).child("Choose Provider Type:"))
-                                    .child(
+                                    .gap_1()
+                                    .max_h(px(220.0))
+                                    .overflow_hidden()
+                                    .children(popular_backends.into_iter().filter(|(b_id, title, desc)| {
+                                        if search_query.is_empty() {
+                                            true
+                                        } else {
+                                            b_id.contains(&search_query) || title.to_lowercase().contains(&search_query) || desc.to_lowercase().contains(&search_query)
+                                        }
+                                    }).map(|(backend_id, title, desc)| {
+                                        let is_sel = cur_backend == backend_id;
+                                        let b_id = backend_id.to_string();
+
                                         div()
                                             .flex()
-                                            .flex_col()
-                                            .gap_1()
-                                            .max_h(px(240.0))
-                                            .overflow_hidden()
-                                            .children(popular_backends.into_iter().map(|(backend_id, title, desc)| {
-                                                let is_sel = cur_backend == backend_id;
-                                                let b_id = backend_id.to_string();
-
+                                            .flex_row()
+                                            .items_center()
+                                            .justify_between()
+                                            .p_2()
+                                            .rounded_md()
+                                            .bg(if is_sel { rgb(0x313244) } else { rgb(0x181825) })
+                                            .border_1()
+                                            .border_color(if is_sel { rgb(0x89b4fa) } else { rgb(0x313244) })
+                                            .child(
                                                 div()
                                                     .flex()
-                                                    .flex_row()
-                                                    .items_center()
-                                                    .justify_between()
-                                                    .p_2()
-                                                    .rounded_md()
-                                                    .bg(if is_sel { rgb(0x313244) } else { rgb(0x181825) })
-                                                    .border_1()
-                                                    .border_color(if is_sel { rgb(0x89b4fa) } else { rgb(0x313244) })
-                                                    .child(
-                                                        div()
-                                                            .flex()
-                                                            .flex_col()
-                                                            .child(div().font_weight(FontWeight::SEMIBOLD).child(title))
-                                                            .child(div().text_size(px(11.0)).text_color(rgb(0xa6adc8)).child(desc)),
-                                                    )
-                                                    .child(
-                                                        Button::new(format!("pick_b_{}", backend_id))
-                                                            .label(if is_sel { "Selected ✓" } else { "Select" })
-                                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                                if let ActiveModal::NewRemoteWizard { selected_backend, .. } = &mut this.active_modal {
-                                                                    *selected_backend = b_id.clone();
-                                                                }
-                                                                cx.notify();
-                                                            })),
-                                                    )
-                                            })),
-                                    ),
+                                                    .flex_col()
+                                                    .child(div().font_weight(FontWeight::SEMIBOLD).child(title))
+                                                    .child(div().text_size(px(11.0)).text_color(rgb(0xa6adc8)).child(desc)),
+                                            )
+                                            .child(
+                                                Button::new(format!("pick_b_{}", backend_id))
+                                                    .label(if is_sel { "Selected ✓" } else { "Select" })
+                                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                                        if let ActiveModal::NewRemoteWizard { selected_backend, .. } = &mut this.active_modal {
+                                                            *selected_backend = b_id.clone();
+                                                        }
+                                                        cx.notify();
+                                                    })),
+                                            )
+                                    })),
                             )
                     } else {
                         // Step 1: Question or OAuth
@@ -1637,6 +1839,21 @@ impl RcmDesktopWindow {
                                     .text_size(px(12.0))
                                     .text_color(rgb(0xa6adc8))
                                     .child(q_help),
+                            )
+                            // Real Interactive Answer Input Field!
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_1()
+                                    .child(div().text_size(px(12.0)).font_weight(FontWeight::MEDIUM).child("Your Value:"))
+                                    .child(
+                                        if is_password {
+                                            Input::new(&self.wizard_answer_input).mask_toggle().into_any_element()
+                                        } else {
+                                            Input::new(&self.wizard_answer_input).into_any_element()
+                                        },
+                                    ),
                             )
                             .children(if let Some(url) = data.oauth_url {
                                 let u = url.to_string();
@@ -1698,7 +1915,8 @@ impl RcmDesktopWindow {
                                     .label("Continue to Configuration →")
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         let app = this.app.clone();
-                                        let n = cur_name.clone();
+                                        let typed_name = this.wizard_name_input.read(cx).value().to_string();
+                                        let n = if typed_name.is_empty() { "my_remote".to_string() } else { typed_name };
                                         let b = cur_backend.clone();
 
                                         cx.spawn(async move |this, cx| {
@@ -1710,16 +1928,15 @@ impl RcmDesktopWindow {
                                                 let step_res = driver.start().await;
 
                                                 let _ = this.update(cx, |this, cx| {
+                                                    this.wizard_driver = Some(driver);
                                                     match step_res {
                                                         Ok(rcm_rc::WizardStep::AskQuestion { state, option, error }) => {
                                                             this.active_modal = ActiveModal::NewRemoteWizard {
                                                                 step: 1,
                                                                 name: n,
                                                                 selected_backend: b,
-                                                                filter: String::new(),
                                                                 question_text: state,
                                                                 question_help: option.help,
-                                                                answer_input: String::new(),
                                                                 is_password: option.is_password,
                                                                 oauth_url: None,
                                                                 error,
@@ -1734,10 +1951,8 @@ impl RcmDesktopWindow {
                                                                 step: 1,
                                                                 name: n,
                                                                 selected_backend: b,
-                                                                filter: String::new(),
                                                                 question_text: "OAuth Authorization".to_string(),
                                                                 question_help: "Please complete authentication in your browser.".to_string(),
-                                                                answer_input: String::new(),
                                                                 is_password: false,
                                                                 oauth_url: auth_url,
                                                                 error: None,
@@ -1753,11 +1968,11 @@ impl RcmDesktopWindow {
                                         }).detach();
                                     }))
                             } else {
-                                Button::new("wizard_done_btn")
-                                    .label("Finish Setup ✓")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.close_modal(cx);
-                                        this.refresh_state(cx);
+                                Button::new("wizard_answer_submit_btn")
+                                    .label("Submit Answer →")
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        let typed_ans = this.wizard_answer_input.read(cx).value().to_string();
+                                        this.submit_wizard_answer(typed_ans, cx);
                                     }))
                             }),
                     ),

@@ -23,6 +23,7 @@ pub enum WizardStep {
     },
 }
 
+#[derive(Clone)]
 pub struct WizardDriver {
     client: RcClient,
     remote_name: String,
