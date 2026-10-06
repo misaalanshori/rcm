@@ -1,8 +1,10 @@
 use rcm_rc::types::{OptionExample, OptionSchema};
 use rcm_ui_kit::form::{FormFieldKind, FormSchema};
 
+/// Traceability: FR-RM-06
+/// Verifies schema-driven form field generation from rclone OptionSchema metadata
 #[test]
-fn test_r3_form_engine_generation_from_option_schema() {
+fn test_fr_rm_06_form_engine_generation_from_option_schema() {
     let options = vec![
         OptionSchema {
             name: "provider".to_string(),
@@ -88,7 +90,7 @@ fn test_r3_form_engine_generation_from_option_schema() {
     let secret_field = schema.field("secret_access_key").expect("secret missing");
     match &secret_field.kind {
         FormFieldKind::Secret { is_revealed, .. } => {
-            assert!(!is_revealed, "Secret field must not be revealed by default (UX-3)");
+            assert!(!is_revealed, "Secret field must not be revealed by default (NFR-SC-04)");
         }
         _ => panic!("Expected Secret kind"),
     }
@@ -99,8 +101,10 @@ fn test_r3_form_engine_generation_from_option_schema() {
     assert_eq!(vfs_field.group, "VFS");
 }
 
+/// Traceability: FR-RM-04
+/// Verifies form schema required field validation and JSON map export
 #[test]
-fn test_form_schema_validation_and_export() {
+fn test_fr_rm_04_form_schema_validation_and_export() {
     let options = vec![
         OptionSchema {
             name: "bucket".to_string(),

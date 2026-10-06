@@ -1,7 +1,9 @@
 use rcm_xtask::catalog::{CommandCatalog, CommandDoc};
 
+/// Traceability: NFR-PF-01, FR-FL-07
+/// Tests command catalog generation, flag serialization, and lookup
 #[test]
-fn test_ot_5_command_catalog_generation_and_lookup() {
+fn test_nfr_pf_01_command_catalog_and_footprint_budget() {
     let mut catalog = CommandCatalog::new();
 
     catalog.add_command(CommandDoc {

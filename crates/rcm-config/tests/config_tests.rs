@@ -40,8 +40,10 @@ remote = my_s3:secret_bucket
 password = test_obscured_password_123
 "#;
 
+/// Traceability: NFR-RL-01
+/// Validates read-only INI parser reading sections and parameters without writing to disk
 #[test]
-fn test_ci_1_ini_parser_sections_and_keys() {
+fn test_nfr_rl_01_read_only_ini_parser() {
     let parsed = IniConfig::parse_str(SAMPLE_CONF).expect("Failed to parse ini");
     assert_eq!(parsed.sections.len(), 2);
 
@@ -54,8 +56,10 @@ fn test_ci_1_ini_parser_sections_and_keys() {
     assert_eq!(crypt.get("remote"), Some("my_s3:secret_bucket"));
 }
 
+/// Traceability: FR-BK-03, NFR-SC-04
+/// Verifies secret key redaction in unified configuration diffs
 #[test]
-fn test_ci_5_bk_2_redacted_diff() {
+fn test_fr_bk_03_nfr_sc_04_redacted_diff() {
     let conf_a = IniConfig::parse_str(SAMPLE_CONF).unwrap();
     let conf_b = IniConfig::parse_str(SAMPLE_CONF_UPDATED).unwrap();
 
@@ -72,8 +76,10 @@ fn test_ci_5_bk_2_redacted_diff() {
     assert!(rendered.contains("us-west-2"));
 }
 
+/// Traceability: FR-BK-01, FR-BK-04
+/// Verifies snapshot store content deduplication and retention policy pruning
 #[tokio::test]
-async fn test_bk_1_snapshot_store_dedupe_and_retention() {
+async fn test_fr_bk_01_bk_04_snapshot_store_dedupe_and_retention() {
     let temp_dir = Utf8PathBuf::from_path_buf(
         std::env::temp_dir().join(format!("rcm_test_snapshots_{}", uuid::Uuid::new_v4())),
     ).unwrap();
@@ -123,11 +129,12 @@ async fn test_bk_1_snapshot_store_dedupe_and_retention() {
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
 
+/// Traceability: FR-RM-18, NFR-RL-02
+/// Tests serialized mutation queue execution and rejection during active restores
 #[tokio::test]
-async fn test_ci_2_ci_3_ci_4_mutation_queue_transaction() {
+async fn test_fr_rm_18_nfr_rl_02_mutation_queue_transaction() {
     let mock = MockRcServer::start().await;
 
-    // Set up mock routes for config/create, config/listremotes, fscache/clear
     mock.set_route("config/create", serde_json::json!({})).await;
     mock.set_route("config/listremotes", serde_json::json!({
         "remotes": ["new_remote"]
@@ -149,7 +156,7 @@ async fn test_ci_2_ci_3_ci_4_mutation_queue_transaction() {
         is_restoring.clone(),
     );
 
-    // Test CI-4: Mutation is rejected when restore is in progress
+    // Mutation is rejected when restore is in progress
     is_restoring.store(true, Ordering::SeqCst);
     let reject_res = queue.execute_mutation(MutationIntent::CreateRemote {
         name: "new_remote".to_string(),
@@ -173,11 +180,12 @@ async fn test_ci_2_ci_3_ci_4_mutation_queue_transaction() {
     let _ = std::fs::remove_dir_all(&temp_snap_dir);
 }
 
+/// Traceability: FR-RM-16
+/// Tests rename remote emulation through RC with referrer rewriting
 #[tokio::test]
-async fn test_cf_10_rename_remote_emulation() {
+async fn test_fr_rm_16_rename_remote_emulation() {
     let mock = MockRcServer::start().await;
 
-    // Mock old remote
     mock.set_route("config/get", serde_json::json!({
         "type": "s3",
         "provider": "AWS",
@@ -219,8 +227,10 @@ async fn test_cf_10_rename_remote_emulation() {
     let _ = std::fs::remove_dir_all(&temp_snap_dir);
 }
 
+/// Traceability: FR-BK-06, FR-BK-07, NFR-RL-03
+/// Tests atomic whole-file restore with pre-restore backup
 #[tokio::test]
-async fn test_bk_2_restore_swap() {
+async fn test_fr_bk_06_bk_07_nfr_rl_03_swap_restore_and_rollback() {
     let temp_dir = Utf8PathBuf::from_path_buf(
         std::env::temp_dir().join(format!("rcm_test_restore_{}", uuid::Uuid::new_v4())),
     ).unwrap();
@@ -251,8 +261,10 @@ async fn test_bk_2_restore_swap() {
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
 
+/// Traceability: FR-BK-02
+/// Tests debounced config watcher detecting external modifications
 #[tokio::test]
-async fn test_cf_9_config_watcher() {
+async fn test_fr_bk_02_config_watcher() {
     let temp_dir = Utf8PathBuf::from_path_buf(
         std::env::temp_dir().join(format!("rcm_test_watcher_{}", uuid::Uuid::new_v4())),
     ).unwrap();

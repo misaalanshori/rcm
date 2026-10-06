@@ -1,11 +1,13 @@
 use rcm_ui::app::AppController;
 use rcm_ui_kit::view_model::SidebarDestination;
 
+/// Traceability: FR-UI-01, FR-UI-02
+/// Tests navigation across all six primary destinations
 #[tokio::test]
-async fn test_ui_destination_switching_and_view_rendering() {
+async fn test_fr_ui_01_ui_02_destination_switching_and_view_rendering() {
     let app = AppController::new();
 
-    // Verify initial destination
+    // Verify initial destination is Dashboard
     assert_eq!(
         app.state().read().await.current_destination,
         SidebarDestination::Home

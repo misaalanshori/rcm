@@ -11,8 +11,10 @@ use rcm_rc::MockRcServer;
 use rcm_ipc::client::IpcClient;
 use rcm_ipc::protocol::RcConnectionInfo;
 
+/// Traceability: FR-LC-05
+/// Verifies background agent IPC service endpoints for status and RC connection info
 #[tokio::test]
-async fn test_agent_ipc_service_endpoints() {
+async fn test_fr_lc_05_agent_ipc_service_endpoints() {
     let mock = MockRcServer::start().await;
     mock.set_route("core/version", serde_json::json!({
         "version": "v1.75.1",

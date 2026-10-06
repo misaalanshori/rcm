@@ -1,8 +1,10 @@
 use rcm_core::MountPreset;
 use rcm_rc::types::ProviderInfo;
 
+/// Traceability: FR-RM-02, FR-RM-03
+/// Verifies provider filtering in New Remote Wizard by name, prefix, and description
 #[test]
-fn test_wizard_provider_filter_and_selection() {
+fn test_fr_rm_02_rm_03_wizard_provider_filter_and_selection() {
     let providers = [
         ProviderInfo {
             name: "Amazon S3".to_string(),
@@ -39,8 +41,10 @@ fn test_wizard_provider_filter_and_selection() {
     assert_eq!(filtered[0].prefix, "drive");
 }
 
+/// Traceability: FR-MT-02, FR-MT-04
+/// Verifies mount modal presets map to concrete VFS caching modes
 #[test]
-fn test_mount_modal_presets_mapping() {
+fn test_fr_mt_02_mt_04_mount_modal_presets_mapping() {
     let presets = [
         MountPreset::Balanced,
         MountPreset::Streaming,

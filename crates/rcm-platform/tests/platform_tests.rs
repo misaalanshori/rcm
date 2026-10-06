@@ -3,8 +3,10 @@ use rcm_platform::fs_driver::check_filesystem_driver;
 use rcm_platform::drive_letters::get_available_drive_letters;
 use rcm_platform::credential::{delete_credential, get_credential, set_credential};
 
+/// Traceability: FR-LC-06
+/// Verifies standard system directory paths and layout structure
 #[test]
-fn test_paths_layout_structure() {
+fn test_fr_lc_06_paths_layout_structure() {
     let paths = RcmPaths::resolve().expect("Failed to resolve RCM paths");
 
     assert!(!paths.config_dir().as_str().is_empty());
@@ -16,8 +18,10 @@ fn test_paths_layout_structure() {
     assert!(rclone_conf.as_str().ends_with("rclone.conf"));
 }
 
+/// Traceability: FR-MT-06
+/// Tests filesystem driver detection (WinFsp on Windows, FUSE on Linux) and remediation message
 #[test]
-fn test_in_3_mt_4_filesystem_driver_check() {
+fn test_fr_mt_06_filesystem_driver_check() {
     let status = check_filesystem_driver();
     if !status.is_installed {
         assert!(!status.remediation_hint.is_empty());
@@ -26,16 +30,20 @@ fn test_in_3_mt_4_filesystem_driver_check() {
     }
 }
 
+/// Traceability: FR-MT-03
+/// Tests available drive letters probe avoiding occupied drive letters (e.g. C:)
 #[cfg(windows)]
 #[test]
-fn test_mt_1_available_drive_letters() {
+fn test_fr_mt_03_available_drive_letters() {
     let available = get_available_drive_letters();
     assert!(!available.contains(&'C'));
     assert!(!available.is_empty());
 }
 
+/// Traceability: FR-LC-14, NFR-SC-03
+/// Tests native OS keyring storage roundtrip for encrypted config password
 #[test]
-fn test_cf_8_credential_keyring_roundtrip() {
+fn test_fr_lc_14_nfr_sc_03_credential_keyring_roundtrip() {
     let test_key = format!("rcm_test_key_{}", uuid::Uuid::new_v4());
     let secret = "super_secure_vault_pass_9988!";
 

@@ -383,46 +383,58 @@ Every requirement in this document is authored strictly using the **Easy Approac
 
 | Requirement ID | EARS Pattern | User Flow (`user-flows.md`) | SRDD ID (`rman-srdd.md`) | Verifying Test Case / Suite |
 |---|---|---|---|---|
-| **`FR-LC-01`** | Ubiquitous | Flow 1 (First Launch) | `DM-7`, `§7.15` | `bootstrap_tests::test_auto_bootstrap_daemon_if_stopped` |
-| **`FR-LC-02`** | Event-Driven | Flow 1 (First Launch) | `DM-10`, `§7.14` | `ipc_tests::test_ipc_handshake_and_request_response` |
-| **`FR-LC-03`** | Unwanted Behavior | Flow 1 (First Launch) | `DM-2`, `§7.1` | `bootstrap_tests::test_auto_bootstrap_daemon_if_stopped` |
-| **`FR-LC-04`** | State-Driven | Flow 1 (First Launch) | `BU-1`, `BU-4` | `supervisor_tests::test_bu_1_binary_manager_layout_and_version_floor` |
-| **`FR-LC-06`** | Ubiquitous | Flow 1 (First Launch) | `DM-2`, `§9` | `supervisor_tests::*` |
-| **`FR-LC-07`** | State-Driven | Flow 1 (First Launch) | `DM-3` | `domain_tests::test_dm_3_daemon_state_lifecycle` |
-| **`FR-LC-08`** | Unwanted Behavior | Flow 1 (First Launch) | `DM-4` | `supervisor_tests::test_dm_4_crash_loop_breaker` |
-| **`FR-LC-09`** | Unwanted Behavior | Flow 1 (First Launch) | `DM-4` | `supervisor_tests::test_dm_4_crash_loop_breaker` |
-| **`FR-LC-10`** | Event-Driven | Flow 9 (Window Close) | `DM-7` | `ui_state_tests::test_ux_6_progressive_disclosure_navigation_and_palette` |
-| **`FR-LC-11`** | Optional Feature | Flow 9 (Autostart) | `DM-6` | `platform_tests::*` |
-| **`FR-LC-12`** | Event-Driven | Flow 9 (Reboot Reconnect) | `DM-8`, `§7.6` | `supervisor_tests::test_reconciler_diff_and_actions` |
-| **`FR-RM-01`** | Event-Driven | Flow 2 (Remote Wizard) | `CF-2` | `wizard_ui_tests::test_wizard_provider_filter_and_selection` |
-| **`FR-RM-02`** | Ubiquitous | Flow 2 (Remote Wizard) | `R3`, `CF-2` | `wizard_ui_tests::test_wizard_provider_filter_and_selection` |
-| **`FR-RM-04`** | Event-Driven | Flow 2 (Remote Wizard) | `CF-2` | `domain_tests::test_cf_1_remote_creation_and_validation` |
-| **`FR-RM-05`** | Event-Driven | Flow 2 (Remote Wizard) | `R2`, `§7.4` | `client_tests::test_r2_wizard_driver_state_machine_transcript` |
-| **`FR-RM-06`** | State-Driven | Flow 2 (Remote Wizard) | `R3`, `§7.3` | `form_engine_tests::test_r3_form_engine_generation_from_option_schema` |
-| **`FR-RM-08`** | Event-Driven | Flow 2 (Remote Wizard) | `CF-3` | `client_tests::test_cf_3_oauth_polling_and_cancellation` |
-| **`FR-RM-11`** | Event-Driven | Flow 2 (Remote Wizard) | `CF-3` | `client_tests::test_cf_3_oauth_polling_and_cancellation` |
-| **`FR-RM-12`** | Event-Driven | Flow 2 (Remote Wizard) | `CI-3`, `BK-1` | `config_tests::test_bk_1_snapshot_store_dedupe_and_retention` |
-| **`FR-RM-13`** | Event-Driven | Flow 2 (Remote Deletion) | `CF-6` | `domain_tests::test_cf_6_remote_dependency_graph_referrers` |
-| **`FR-RM-14`** | Event-Driven | Flow 2 (Remote Deletion) | `CF-6`, `CI-2` | `config_tests::test_ci_2_ci_3_ci_4_mutation_queue_transaction` |
-| **`FR-MT-01`** | Event-Driven | Flow 3 (Mount Creation) | `MT-1` | `wizard_ui_tests::test_mount_modal_presets_mapping` |
-| **`FR-MT-03`** | Ubiquitous | Flow 3 (Mount Presets) | `MT-2` | `domain_tests::test_mt_1_mt_2_mount_profile_presets_and_options` |
-| **`FR-MT-04`** | Unwanted Behavior | Flow 3 (Target Check) | `MT-4` | `domain_tests::test_mt_4_mount_profile_windows_network_mode_validation` |
-| **`FR-MT-05`** | Event-Driven | Flow 3 (Mount Execution) | `MT-1`, `MT-5` | `supervisor_tests::test_reconciler_diff_and_actions` |
-| **`FR-MT-06`** | Event-Driven | Flow 3 (Shell Open) | `MT-5` | `platform_tests::*` |
-| **`FR-MT-07`** | Event-Driven | Flow 4 (Unmounting) | `MT-5` | `supervisor_tests::test_reconciler_diff_and_actions` |
-| **`FR-MT-11`** | Event-Driven | Flow 4 (Remounting) | `MT-5` | `supervisor_tests::test_reconciler_diff_and_actions` |
-| **`FR-MT-13`** | State-Driven | Flow 4 (Unmanaged Mount) | `MT-7` | `supervisor_tests::test_reconciler_diff_and_actions` |
-| **`FR-SV-03`** | Unwanted Behavior | Flow 6 (LAN Serves) | `SV-3` | `domain_tests::test_sv_3_serve_profile_safe_bind_validation` |
-| **`FR-SV-05`** | Event-Driven | Flow 6 (Stop Serve) | `SV-1` | `client_tests::*` |
-| **`FR-FL-02`** | Event-Driven | Flow 5 (Files Listing) | `OT-1` | `client_tests::test_r1_rc_client_core_calls` |
-| **`FR-BK-01`** | Event-Driven | Flow 7 (Snapshots) | `BK-1` | `config_tests::test_bk_1_snapshot_store_dedupe_and_retention` |
-| **`FR-BK-03`** | Event-Driven | Flow 7 (Redacted Diff) | `CI-5`, `BK-2` | `config_tests::test_ci_5_bk_2_redacted_diff` |
-| **`FR-BK-04`** | Event-Driven | Flow 7 (Whole Restore) | `BK-2`, `§7.5` | `config_tests::test_bk_2_restore_swap` |
-| **`FR-BK-07`** | Unwanted Behavior | Flow 7 (Rollback) | `BK-2`, `BK-4` | `config_tests::test_bk_2_restore_swap` |
-| **`FR-UI-01`** | Ubiquitous | Flow 8 (Navigation) | `UX-6`, `§7.11` | `tui_tests::test_ui_destination_switching_and_view_rendering` |
-| **`FR-UI-03`** | Event-Driven | Flow 8 (Command Palette)| `UX-2` | `ui_state_tests::test_ux_6_progressive_disclosure_navigation_and_palette` |
-| **`NFR-PF-01`**| Ubiquitous | Footprint Budget | `NF-13` | `xtask_tests::test_ot_5_command_catalog_generation_and_lookup` |
-| **`NFR-PF-02`**| State-Driven | Memory Budget | `NF-1` | `agent_tests::test_agent_ipc_service_endpoints` |
-| **`NFR-TH-01`**| Ubiquitous | Runtime Isolation | `§7.11` | `bootstrap_tests::test_auto_bootstrap_daemon_if_stopped` |
-| **`NFR-SC-01`**| Ubiquitous | Secret Handling | `R7`, `§9` | `supervisor_tests::*` |
-| **`NFR-RL-01`**| Ubiquitous | Single Writer | `CI-1`, `R12` | `config_tests::test_ci_2_ci_3_ci_4_mutation_queue_transaction` |
+| **`FR-LC-01`** | Ubiquitous | Flow 1 (First Launch) | `DM-7`, `§7.15` | `bootstrap_tests::test_fr_lc_01_lc_03_nfr_th_01_auto_bootstrap_daemon_if_stopped` |
+| **`FR-LC-02`** | Event-Driven | Flow 1 (First Launch) | `DM-10`, `§7.14` | `ipc_tests::test_fr_lc_02_nfr_sc_02_ipc_handshake_and_request_response` |
+| **`FR-LC-03`** | Unwanted Behavior | Flow 1 (First Launch) | `DM-2`, `§7.1` | `bootstrap_tests::test_fr_lc_01_lc_03_nfr_th_01_auto_bootstrap_daemon_if_stopped` |
+| **`FR-LC-04`** | State-Driven | Flow 1 (First Launch) | `BU-1`, `BU-4` | `supervisor_tests::test_fr_lc_04_binary_manager_layout_and_version_floor` |
+| **`FR-LC-05`** | Unwanted Behavior | Flow 1 (First Launch) | `DM-5`, `DM-1` | `agent_tests::test_fr_lc_05_agent_ipc_service_endpoints` |
+| **`FR-LC-06`** | Ubiquitous | Flow 1 (First Launch) | `DM-2`, `§9` | `platform_tests::test_fr_lc_06_paths_layout_structure` |
+| **`FR-LC-07`** | State-Driven | Flow 1 (First Launch) | `DM-3` | `domain_tests::test_fr_lc_07_daemon_state_lifecycle` |
+| **`FR-LC-08`** | Unwanted Behavior | Flow 1 (First Launch) | `DM-4` | `supervisor_tests::test_fr_lc_08_lc_09_lc_22_lc_23_crash_loop_breaker` |
+| **`FR-LC-09`** | Unwanted Behavior | Flow 1 (First Launch) | `DM-4` | `supervisor_tests::test_fr_lc_08_lc_09_lc_22_lc_23_crash_loop_breaker` |
+| **`FR-LC-10`** | Event-Driven | Flow 9 (Window Close) | `DM-7` | `ui_state_tests::test_fr_ui_03_ui_04_command_palette_and_dashboard_stats` |
+| **`FR-LC-12`** | Event-Driven | Flow 9 (Reboot Reconnect) | `DM-8`, `§7.6` | `supervisor_tests::test_fr_lc_12_mt_13_reconciler_diff_and_actions` |
+| **`FR-LC-14`** | Optional Feature | Flow 1 (Password Cmd) | `CF-8`, `§7.12` | `platform_tests::test_fr_lc_14_nfr_sc_03_credential_keyring_roundtrip` |
+| **`FR-LC-15`** | Ubiquitous | Flow 1 (Log Buffer) | `DM-9`, `§7.15` | `supervisor_tests::test_fr_lc_15_log_ring_buffer_bounded` |
+| **`FR-RM-01`** | Event-Driven | Flow 2 (Remote Wizard) | `CF-2` | `wizard_ui_tests::test_fr_rm_02_rm_03_wizard_provider_filter_and_selection` |
+| **`FR-RM-02`** | Ubiquitous | Flow 2 (Remote Wizard) | `R3`, `CF-2` | `wizard_ui_tests::test_fr_rm_02_rm_03_wizard_provider_filter_and_selection` |
+| **`FR-RM-03`** | Event-Driven | Flow 2 (Remote Wizard) | `CF-2` | `wizard_ui_tests::test_fr_rm_02_rm_03_wizard_provider_filter_and_selection` |
+| **`FR-RM-04`** | Event-Driven | Flow 2 (Remote Wizard) | `CF-2` | `domain_tests::test_fr_rm_04_remote_name_validation` |
+| **`FR-RM-05`** | Event-Driven | Flow 2 (Remote Wizard) | `R2`, `§7.4` | `client_tests::test_fr_rm_05_rm_08_wizard_driver_state_machine` |
+| **`FR-RM-06`** | State-Driven | Flow 2 (Remote Wizard) | `R3`, `§7.3` | `form_engine_tests::test_fr_rm_06_form_engine_generation_from_option_schema` |
+| **`FR-RM-08`** | Event-Driven | Flow 2 (Remote Wizard) | `R2`, `§7.4` | `client_tests::test_fr_rm_05_rm_08_wizard_driver_state_machine` |
+| **`FR-RM-10`** | State-Driven | Flow 2 (OAuth Step) | `CF-3` | `client_tests::test_fr_rm_10_rm_12_rm_14_oauth_polling_and_cancellation` |
+| **`FR-RM-12`** | State-Driven | Flow 2 (OAuth Step) | `CF-3` | `client_tests::test_fr_rm_10_rm_12_rm_14_oauth_polling_and_cancellation` |
+| **`FR-RM-14`** | Event-Driven | Flow 2 (OAuth Cancel) | `CF-3` | `client_tests::test_fr_rm_10_rm_12_rm_14_oauth_polling_and_cancellation` |
+| **`FR-RM-16`** | Event-Driven | Flow 2 (Dependency Graph) | `CF-6`, `CF-10` | `domain_tests::test_fr_rm_16_remote_dependency_graph` |
+| **`FR-RM-18`** | Event-Driven | Flow 2 (Remote Deletion) | `CI-2`, `CF-6` | `config_tests::test_fr_rm_18_nfr_rl_02_mutation_queue_transaction` |
+| **`FR-MT-01`** | Event-Driven | Flow 3 (Mount Creation) | `MT-1` | `wizard_ui_tests::test_fr_mt_02_mt_04_mount_modal_presets_mapping` |
+| **`FR-MT-02`** | Ubiquitous | Flow 3 (Mount Presets) | `MT-2` | `domain_tests::test_fr_mt_02_mt_04_mount_presets_options` |
+| **`FR-MT-03`** | Ubiquitous | Flow 3 (Drive Letters) | `MT-1` | `platform_tests::test_fr_mt_03_available_drive_letters` |
+| **`FR-MT-04`** | Ubiquitous | Flow 3 (Mount Presets) | `MT-2` | `domain_tests::test_fr_mt_02_mt_04_mount_presets_options` |
+| **`FR-MT-05`** | Unwanted Behavior | Flow 3 (Target Check) | `MT-4` | `domain_tests::test_fr_mt_05_windows_network_mode_validation` |
+| **`FR-MT-06`** | State-Driven | Flow 3 (WinFsp Check) | `MT-4`, `IN-3` | `platform_tests::test_fr_mt_06_filesystem_driver_check` |
+| **`FR-MT-07`** | Event-Driven | Flow 3 (Mount Execution) | `MT-1`, `MT-5` | `supervisor_tests::test_fr_lc_12_mt_13_reconciler_diff_and_actions` |
+| **`FR-MT-13`** | State-Driven | Flow 4 (Unmanaged Mount) | `MT-7` | `supervisor_tests::test_fr_lc_12_mt_13_reconciler_diff_and_actions` |
+| **`FR-SV-03`** | Ubiquitous | Flow 6 (Loopback Bind) | `SV-3` | `domain_tests::test_fr_sv_03_sv_04_serve_bind_auth_validation` |
+| **`FR-SV-04`** | Unwanted Behavior | Flow 6 (LAN Auth) | `SV-3` | `domain_tests::test_sv_3_serve_profile_safe_bind_validation` |
+| **`FR-FL-02`** | Event-Driven | Flow 5 (Files Listing) | `OT-1` | `client_tests::test_fr_lc_06_rc_client_core_calls` |
+| **`FR-FL-07`** | Event-Driven | Flow 5 (Transfer Jobs) | `OT-2` | `domain_tests::test_fr_fl_07_job_profile_validation` |
+| **`FR-BK-01`** | Event-Driven | Flow 7 (Snapshots) | `BK-1` | `config_tests::test_fr_bk_01_bk_04_snapshot_store_dedupe_and_retention` |
+| **`FR-BK-02`** | State-Driven | Flow 7 (External Watch) | `CF-9` | `config_tests::test_fr_bk_02_config_watcher` |
+| **`FR-BK-03`** | Event-Driven | Flow 7 (Redacted Diff) | `CI-5`, `BK-2` | `config_tests::test_fr_bk_03_nfr_sc_04_redacted_diff` |
+| **`FR-BK-04`** | Ubiquitous | Flow 7 (Retention Pruning) | `BK-1` | `config_tests::test_fr_bk_01_bk_04_snapshot_store_dedupe_and_retention` |
+| **`FR-BK-06`** | Event-Driven | Flow 7 (Whole Restore) | `BK-2`, `§7.5` | `config_tests::test_fr_bk_06_bk_07_nfr_rl_03_swap_restore_and_rollback` |
+| **`FR-BK-07`** | Unwanted Behavior | Flow 7 (Rollback) | `BK-2`, `BK-4` | `config_tests::test_fr_bk_06_bk_07_nfr_rl_03_swap_restore_and_rollback` |
+| **`FR-UI-01`** | Ubiquitous | Flow 8 (Navigation) | `UX-6`, `§7.11` | `tui_tests::test_fr_ui_01_ui_02_destination_switching_and_view_rendering` |
+| **`FR-UI-02`** | Event-Driven | Flow 8 (Key Navigation) | `UX-2` | `tui_tests::test_fr_ui_01_ui_02_destination_switching_and_view_rendering` |
+| **`FR-UI-03`** | Event-Driven | Flow 8 (Command Palette)| `UX-2` | `ui_state_tests::test_fr_ui_03_ui_04_command_palette_and_dashboard_stats` |
+| **`FR-UI-04`** | State-Driven | Flow 8 (Search Filter) | `UX-2` | `ui_state_tests::test_fr_ui_03_ui_04_command_palette_and_dashboard_stats` |
+| **`NFR-PF-01`**| Ubiquitous | Footprint Budget | `NF-13` | `xtask_tests::test_nfr_pf_01_command_catalog_and_footprint_budget` |
+| **`NFR-PF-02`**| State-Driven | Memory Budget | `NF-1` | `agent_tests::test_fr_lc_05_agent_ipc_service_endpoints` |
+| **`NFR-TH-01`**| Ubiquitous | Runtime Isolation | `§7.11` | `bootstrap_tests::test_fr_lc_01_lc_03_nfr_th_01_auto_bootstrap_daemon_if_stopped` |
+| **`NFR-SC-03`**| Ubiquitous | Secret Handling | `§7.12` | `platform_tests::test_fr_lc_14_nfr_sc_03_credential_keyring_roundtrip` |
+| **`NFR-SC-04`**| Ubiquitous | Redaction | `CI-5`, `UX-3` | `config_tests::test_fr_bk_03_nfr_sc_04_redacted_diff` |
+| **`NFR-RL-01`**| Ubiquitous | Single Writer | `CI-1`, `R12` | `config_tests::test_nfr_rl_01_read_only_ini_parser` |
+| **`NFR-RL-02`**| State-Driven | Mutation Queue | `CI-2` | `config_tests::test_fr_rm_18_nfr_rl_02_mutation_queue_transaction` |
+| **`NFR-RL-03`**| Unwanted Behavior | Atomic Crash Safety | `NF-4` | `config_tests::test_fr_bk_06_bk_07_nfr_rl_03_swap_restore_and_rollback` |

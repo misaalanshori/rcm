@@ -2,8 +2,10 @@ use rcm_core::DaemonState;
 use rcm_ui_kit::view_model::{MountItemViewModel, SidebarDestination};
 use rcm_ui::app::AppController;
 
+/// Traceability: FR-UI-03, FR-UI-04, NFR-AC-01
+/// Tests progressive disclosure navigation, command palette search filtering, and dashboard stats
 #[tokio::test]
-async fn test_ux_6_progressive_disclosure_navigation_and_palette() {
+async fn test_fr_ui_03_ui_04_command_palette_and_dashboard_stats() {
     let app = AppController::new();
 
     // 1. Initial destination is Home (Dashboard)
@@ -22,7 +24,7 @@ async fn test_ux_6_progressive_disclosure_navigation_and_palette() {
         assert_eq!(s.current_destination, SidebarDestination::Mounts);
     }
 
-    // 3. Command palette toggling (UX-2)
+    // 3. Command palette toggling (FR-UI-03)
     app.toggle_command_palette().await;
     {
         let state = app.state();
@@ -30,7 +32,7 @@ async fn test_ux_6_progressive_disclosure_navigation_and_palette() {
         assert!(s.command_palette_open);
     }
 
-    // 4. Command palette search filtering
+    // 4. Command palette search filtering (FR-UI-04)
     app.set_command_palette_query("remotes").await;
     let items = app.get_command_palette_items().await;
     assert!(!items.is_empty());

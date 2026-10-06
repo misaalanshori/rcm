@@ -17,7 +17,6 @@ impl Drop for RcdProcess {
 }
 
 fn find_rclone_exe() -> Option<PathBuf> {
-    // 1. Check RCLONE_EXE environment variable if provided by CI or developer
     if let Ok(val) = std::env::var("RCLONE_EXE") {
         let p = PathBuf::from(val);
         if p.exists() {
@@ -67,12 +66,14 @@ async fn spawn_temp_rcd() -> Option<RcdProcess> {
     }
 }
 
+/// Traceability: FR-LC-06, FR-RM-02, NFR-SC-01
+/// Integration test against real rcd process verifying noop, version, obscure, providers, and options/info
 #[tokio::test]
 async fn test_real_rclone_rc_integration() {
     let proc = match spawn_temp_rcd().await {
         Some(p) => p,
         None => {
-            eprintln!("Skipping test_real_rclone_rc_integration: rclone binary not found or rcd failed to bind");
+            eprintln!("Skipping test_real_rclone_rc_integration: rclone binary not set via RCLONE_EXE");
             return;
         }
     };

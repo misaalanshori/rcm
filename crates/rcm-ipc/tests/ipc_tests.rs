@@ -5,13 +5,14 @@ use rcm_ipc::protocol::RcConnectionInfo;
 use rcm_ipc::server::IpcServer;
 use rcm_ipc::client::IpcClient;
 
+/// Traceability: FR-LC-02, NFR-SC-02
+/// Tests local IPC protocol handshake, request/response, and error handling over named pipes
 #[tokio::test]
-async fn test_ipc_handshake_and_request_response() {
+async fn test_fr_lc_02_nfr_sc_02_ipc_handshake_and_request_response() {
     let pipe_name = format!("rcm-test-pipe-{}", uuid::Uuid::new_v4());
 
     let server = IpcServer::bind(&pipe_name).await.expect("Failed to bind IPC server");
 
-    // Spawn server handling in background
     let srv_handle = tokio::spawn(async move {
         server.run(|req| async move {
             match req.method.as_str() {
@@ -42,7 +43,6 @@ async fn test_ipc_handshake_and_request_response() {
 
     sleep(Duration::from_millis(50)).await;
 
-    // Connect client
     let client = IpcClient::connect(&pipe_name).await.expect("Failed to connect IPC client");
 
     // 1. Test daemon.status

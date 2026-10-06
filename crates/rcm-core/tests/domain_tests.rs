@@ -5,20 +5,30 @@ use rcm_core::{
     SnapshotReason,
 };
 
+/// Traceability: FR-RM-04
+/// Validates remote naming restrictions (no empty, no ':', no '/', no '\')
 #[test]
-fn test_cf_1_remote_creation_and_validation() {
+fn test_fr_rm_04_remote_name_validation() {
     let valid_remote = Remote::new("my-remote", "s3");
     assert!(valid_remote.is_ok());
 
     let empty_name = Remote::new("", "s3");
     assert!(matches!(empty_name, Err(CoreError::InvalidRemoteName(_))));
 
-    let invalid_chars = Remote::new("remote:bad", "s3");
-    assert!(matches!(invalid_chars, Err(CoreError::InvalidRemoteName(_))));
+    let invalid_colon = Remote::new("remote:bad", "s3");
+    assert!(matches!(invalid_colon, Err(CoreError::InvalidRemoteName(_))));
+
+    let invalid_slash = Remote::new("remote/bad", "s3");
+    assert!(matches!(invalid_slash, Err(CoreError::InvalidRemoteName(_))));
+
+    let invalid_backslash = Remote::new("remote\\bad", "s3");
+    assert!(matches!(invalid_backslash, Err(CoreError::InvalidRemoteName(_))));
 }
 
+/// Traceability: FR-RM-16
+/// Tests remote dependency graph evaluation to discover upstreams and referrers
 #[test]
-fn test_cf_6_remote_dependency_graph_referrers() {
+fn test_fr_rm_16_remote_dependency_graph() {
     let base_remote = Remote::new("my_s3", "s3").unwrap();
     let mut crypt_remote = Remote::new("my_crypt", "crypt").unwrap();
     crypt_remote.parameters.insert(
@@ -44,8 +54,10 @@ fn test_cf_6_remote_dependency_graph_referrers() {
     assert!(!crypt_referrers.contains("my_s3"));
 }
 
+/// Traceability: FR-MT-02, FR-MT-04
+/// Tests mount profile presets and flat VFS options mapping
 #[test]
-fn test_mt_1_mt_2_mount_profile_presets_and_options() {
+fn test_fr_mt_02_mt_04_mount_presets_options() {
     let mut profile = MountProfile::new(
         "Media Drive",
         "my_gdrive:Media",
@@ -63,8 +75,10 @@ fn test_mt_1_mt_2_mount_profile_presets_and_options() {
     assert!(profile.validate().is_ok());
 }
 
+/// Traceability: FR-MT-05
+/// Validates rejection of network mode combined with a folder mountpoint
 #[test]
-fn test_mt_4_mount_profile_windows_network_mode_validation() {
+fn test_fr_mt_05_windows_network_mode_validation() {
     let mut profile = MountProfile::new(
         "Bad Combination",
         "remote:path",
@@ -75,8 +89,10 @@ fn test_mt_4_mount_profile_windows_network_mode_validation() {
     assert!(matches!(res, Err(CoreError::Validation(_))));
 }
 
+/// Traceability: FR-SV-03, FR-SV-04
+/// Tests serve profile loopback default and non-loopback authentication enforcement
 #[test]
-fn test_sv_3_serve_profile_safe_bind_validation() {
+fn test_fr_sv_03_sv_04_serve_bind_auth_validation() {
     let loopback_serve = ServeProfile::new(
         "Local WebDAV",
         "my_remote:folder",
@@ -100,8 +116,27 @@ fn test_sv_3_serve_profile_safe_bind_validation() {
     assert!(lan_serve.validate().is_ok());
 }
 
+/// Traceability: FR-LC-07
+/// Tests daemon state transitions and readiness helper methods
 #[test]
-fn test_ci_2_ci_3_mutation_intent_roundtrip() {
+fn test_fr_lc_07_daemon_state_lifecycle() {
+    let state = DaemonState::Starting;
+    assert!(!state.is_ready());
+    assert!(!state.is_stopped());
+
+    let ready_state = DaemonState::Ready {
+        execute_id: "exec-123".to_string(),
+        version: "v1.75.1".to_string(),
+        pid: 4567,
+        addr: "http://127.0.0.1:5572".to_string(),
+    };
+    assert!(ready_state.is_ready());
+}
+
+/// Traceability: FR-BK-01
+/// Tests roundtrip serialization of mutation intents
+#[test]
+fn test_fr_bk_01_mutation_intent_serialization() {
     let mut params = BTreeMap::new();
     params.insert("type".to_string(), serde_json::Value::String("s3".to_string()));
     let intent = MutationIntent::CreateRemote {
@@ -116,8 +151,10 @@ fn test_ci_2_ci_3_mutation_intent_roundtrip() {
     assert_eq!(intent, deserialized);
 }
 
+/// Traceability: FR-BK-04
+/// Tests parsing of snapshot reasons
 #[test]
-fn test_bk_1_snapshot_reason_parsing() {
+fn test_fr_bk_04_snapshot_reason_parsing() {
     assert_eq!(
         "pre-mutation".parse::<SnapshotReason>().unwrap(),
         SnapshotReason::PreMutation
@@ -132,23 +169,10 @@ fn test_bk_1_snapshot_reason_parsing() {
     );
 }
 
+/// Traceability: FR-FL-07
+/// Tests job profile validation
 #[test]
-fn test_dm_3_daemon_state_lifecycle() {
-    let state = DaemonState::Starting;
-    assert!(!state.is_ready());
-    assert!(!state.is_stopped());
-
-    let ready_state = DaemonState::Ready {
-        execute_id: "exec-123".to_string(),
-        version: "v1.75.1".to_string(),
-        pid: 4567,
-        addr: "http://127.0.0.1:5572".to_string(),
-    };
-    assert!(ready_state.is_ready());
-}
-
-#[test]
-fn test_ot_2_job_profile_validation() {
+fn test_fr_fl_07_job_profile_validation() {
     let valid_job = JobProfile::new(
         "Backup to Cloud",
         JobOperation::Sync,

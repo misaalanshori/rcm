@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 use rcm_rc::{MockRcServer, RcClient, WizardStep};
 
+/// Traceability: FR-LC-06, FR-FL-02
+/// Verifies core RC client endpoints (version, pid, obscure, listremotes, listmounts)
 #[tokio::test]
-async fn test_r1_rc_client_core_calls() {
+async fn test_fr_lc_06_rc_client_core_calls() {
     let mock = MockRcServer::start().await;
 
     mock.set_route("core/version", serde_json::json!({
@@ -51,11 +53,13 @@ async fn test_r1_rc_client_core_calls() {
     mock.stop();
 }
 
+/// Traceability: FR-RM-05, FR-RM-08
+/// Verifies wizard state machine step sequence, question extraction, and answer passing
 #[tokio::test]
-async fn test_r2_wizard_driver_state_machine_transcript() {
+async fn test_fr_rm_05_rm_08_wizard_driver_state_machine() {
     let mock = MockRcServer::start().await;
 
-    // Simulate Step 1: config/create asks for client_id
+    // Step 1: config/create asks for client_id
     mock.enqueue_wizard_step(serde_json::json!({
         "State": "client_id",
         "Option": {
@@ -68,7 +72,7 @@ async fn test_r2_wizard_driver_state_machine_transcript() {
         "Error": ""
     })).await;
 
-    // Simulate Step 2: config/update answers client_id, rclone asks for client_secret
+    // Step 2: config/update answers client_id, rclone asks for client_secret
     mock.enqueue_wizard_step(serde_json::json!({
         "State": "client_secret",
         "Option": {
@@ -82,7 +86,7 @@ async fn test_r2_wizard_driver_state_machine_transcript() {
         "Error": ""
     })).await;
 
-    // Simulate Step 3: config/update answers client_secret, rclone completes
+    // Step 3: config/update answers client_secret, rclone completes
     mock.enqueue_wizard_step(serde_json::json!({
         "State": "",
         "Option": null,
@@ -134,8 +138,10 @@ async fn test_r2_wizard_driver_state_machine_transcript() {
     mock.stop();
 }
 
+/// Traceability: FR-RM-10, FR-RM-12, FR-RM-14
+/// Verifies OAuth status polling and cancellation flow
 #[tokio::test]
-async fn test_cf_3_oauth_polling_and_cancellation() {
+async fn test_fr_rm_10_rm_12_rm_14_oauth_polling_and_cancellation() {
     let mock = MockRcServer::start().await;
 
     mock.set_route("config/oauthstatus", serde_json::json!({

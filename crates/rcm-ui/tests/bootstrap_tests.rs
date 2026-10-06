@@ -7,8 +7,10 @@ use rcm_ipc::protocol::{IpcError, IpcRequest, RcConnectionInfo};
 use rcm_ipc::IpcServer;
 use rcm_ui::app::AppController;
 
+/// Traceability: FR-LC-01, FR-LC-03, NFR-TH-01, NFR-TH-03
+/// Tests zero-friction auto-connect, auto-spawn, and auto-bootstrap of stopped daemon
 #[tokio::test]
-async fn test_auto_bootstrap_daemon_if_stopped() {
+async fn test_fr_lc_01_lc_03_nfr_th_01_auto_bootstrap_daemon_if_stopped() {
     let pipe_name = format!("rcm-test-bootstrap-{}", uuid::Uuid::new_v4());
     let server = IpcServer::bind(&pipe_name).await.expect("Bind failed");
 
